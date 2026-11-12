@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/skill-manifest.schema.json",
+  "title": "Skill manifest",
+  "type": "object",
+  "required": ["kind", "schema_version", "id", "version", "name", "description", "compatibility", "instructions_path"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "skill" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "name": { "$ref": "common.schema.json#/$defs/text" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "compatibility": { "$ref": "common.schema.json#/$defs/compatibility" },
+    "instructions_path": { "$ref": "common.schema.json#/$defs/path" },
+    "requires_mcp": { "$ref": "common.schema.json#/$defs/idList" },
+    "permissions": { "$ref": "common.schema.json#/$defs/permissions" }
+  }
+}

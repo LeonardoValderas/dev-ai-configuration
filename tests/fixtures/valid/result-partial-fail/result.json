@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "kind": "result",
+  "execution_status": "PARTIAL",
+  "validation_result": "FAIL",
+  "files_changed": [
+    "src/parser/index.ts"
+  ],
+  "evidence": [
+    {
+      "description": "Unit tests pass",
+      "command": "npm test",
+      "output_summary": "12 passed"
+    }
+  ],
+  "warnings": [
+    "one suite skipped"
+  ],
+  "unresolved_blockers": []
+}

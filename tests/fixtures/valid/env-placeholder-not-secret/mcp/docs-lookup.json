@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "kind": "mcp",
+  "id": "docs-lookup",
+  "version": "1.0.0",
+  "name": "docs-lookup",
+  "description": "Reads api_key=$API_KEY from the environment",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "transport": "stdio",
+  "command": "npx",
+  "args": [
+    "-y",
+    "example-docs-server@1.0.0"
+  ],
+  "env_vars": [
+    "API_KEY"
+  ],
+  "access": "read-only"
+}

@@ -62,17 +62,29 @@ explicitly excluded from all of the above — see
 
 See [docs/security-principles.md](docs/security-principles.md).
 
-## Current status: Phase 2A
+## Contracts, manifests and validators (Phase 2B)
 
-This repository currently contains only the minimal scaffold:
-directory structure, placeholder files, and this documentation. The
-following are **not yet included** and are planned for later phases:
+- `standards/schemas/` — JSON Schema (draft 2020-12) for the task contract,
+  result format, and agent / skill / MCP / adapter / technology-profile
+  manifests (single source of truth).
+- `compatibility/matrix.json` — supported schema versions, standard versions
+  and target tools.
+- `installer/validate.mjs` — dependency-free, read-only, credential-free
+  validator (`npm run validate`; tests via `npm test`, Node 20+).
+- `tests/fixtures/` — valid and invalid fixtures, each invalid one tied to an
+  expected error code.
+
+See [docs/manifest-format.md](docs/manifest-format.md) and
+[docs/adding-components.md](docs/adding-components.md).
+
+## Current status: Phase 2B
+
+Phase 2A scaffold plus the shared contracts, schemas and validators above.
+`standards/manifests/` is intentionally empty: the following are **not yet
+included** and are planned for later phases:
 
 - Agents, skills, or any agent/skill definitions.
 - Spec Kit integration.
 - Context7 integration.
 - MCP (Model Context Protocol) server configuration.
-- Any implementation tooling, installer logic, or adapter content.
-
-Nothing in this repository should be assumed functional beyond the
-scaffold and documentation described here.
+- Adapter content and installer logic beyond validation.

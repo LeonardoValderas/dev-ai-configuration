@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "kind": "adapter",
+  "id": "claude-code",
+  "version": "1.0.0",
+  "name": "claude-code",
+  "description": "Synthetic adapter fixture",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "target_tool": "claude-code",
+  "tool_versions": {
+    "min": "1.0.0"
+  },
+  "output_dir": "build/claude-code",
+  "supports": {},
+  "provider_config": {
+    "model": "x"
+  }
+}

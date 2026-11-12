@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/result.schema.json",
+  "title": "Common result format",
+  "type": "object",
+  "required": ["schema_version", "kind", "execution_status", "validation_result", "files_changed", "evidence", "warnings", "unresolved_blockers"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "kind": { "const": "result" },
+    "execution_status": { "enum": ["COMPLETE", "PARTIAL", "BLOCKED"] },
+    "validation_result": { "enum": ["PASS", "FAIL", "BLOCKED"] },
+    "files_changed": { "$ref": "common.schema.json#/$defs/pathList" },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["description"],
+        "additionalProperties": false,
+        "properties": {
+          "description": { "$ref": "common.schema.json#/$defs/text" },
+          "command": { "type": "string" },
+          "output_summary": { "type": "string" }
+        }
+      }
+    },
+    "warnings": { "$ref": "common.schema.json#/$defs/textList" },
+    "unresolved_blockers": { "$ref": "common.schema.json#/$defs/textList" }
+  }
+}

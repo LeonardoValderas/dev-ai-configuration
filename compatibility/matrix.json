@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "kind": "compatibility-matrix",
+  "supported_schema_versions": ["1.0"],
+  "supported_standard_versions": ["1.0"],
+  "supported_tools": ["claude-code", "codex", "cursor"]
+}

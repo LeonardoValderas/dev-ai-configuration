@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "code-reviewer",
+  "version": "1.0.0",
+  "name": "code-reviewer",
+  "description": "Synthetic agent fixture",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "code-reviewer.md",
+  "skills": [
+    "git-hygiene"
+  ],
+  "mcp_servers": [
+    "docs-lookup"
+  ],
+  "technology_profiles": [
+    "typescript-node"
+  ],
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep"
+    ],
+    "permission_mode": "plan",
+    "shell_commands": [
+      "git diff",
+      "npm test"
+    ],
+    "writable_paths": [
+      "src/**"
+    ],
+    "production_access": "none"
+  }
+}

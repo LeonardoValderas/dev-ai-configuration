@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/technology-profile-manifest.schema.json",
+  "title": "Technology profile manifest",
+  "type": "object",
+  "required": ["kind", "schema_version", "id", "version", "name", "description", "compatibility", "languages", "validation_commands"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "technology-profile" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "name": { "$ref": "common.schema.json#/$defs/text" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "compatibility": { "$ref": "common.schema.json#/$defs/compatibility" },
+    "languages": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/text" } },
+    "validation_commands": { "$ref": "common.schema.json#/$defs/textList" },
+    "skills": { "$ref": "common.schema.json#/$defs/idList" },
+    "mcp_servers": { "$ref": "common.schema.json#/$defs/idList" }
+  }
+}

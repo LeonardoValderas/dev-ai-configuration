@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "kind": "skill",
+  "id": "git-hygiene",
+  "version": "1.0.0",
+  "name": "git-hygiene",
+  "description": "Synthetic skill fixture",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "git-hygiene.md",
+  "requires_mcp": [
+    "no-such-mcp"
+  ],
+  "permissions": {
+    "tools": [
+      "Bash(git status)",
+      "Bash(git diff)"
+    ],
+    "permission_mode": "default"
+  }
+}

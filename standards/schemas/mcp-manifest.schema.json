@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/mcp-manifest.schema.json",
+  "title": "MCP server manifest (declaration only; no credentials, no provider config)",
+  "type": "object",
+  "required": ["kind", "schema_version", "id", "version", "name", "description", "compatibility", "transport", "access"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "mcp" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "name": { "$ref": "common.schema.json#/$defs/text" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "compatibility": { "$ref": "common.schema.json#/$defs/compatibility" },
+    "transport": { "enum": ["stdio", "http"] },
+    "command": { "$ref": "common.schema.json#/$defs/text" },
+    "args": { "type": "array", "items": { "type": "string" } },
+    "url": { "type": "string", "pattern": "^https://[^@\\s/]+(/[^\\s]*)?$" },
+    "env_vars": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" } },
+    "access": { "enum": ["read-only", "read-write", "admin"] }
+  },
+  "allOf": [
+    { "if": { "properties": { "transport": { "const": "stdio" } }, "required": ["transport"] }, "then": { "required": ["command"] } },
+    { "if": { "properties": { "transport": { "const": "http" } }, "required": ["transport"] }, "then": { "required": ["url"] } }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "kind": "technology-profile",
+  "id": "typescript-node",
+  "version": "1.0.0",
+  "name": "typescript-node",
+  "description": "Synthetic technology-profile fixture",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "languages": [
+    "typescript"
+  ],
+  "validation_commands": [
+    "npm test",
+    "npx tsc --noEmit"
+  ],
+  "skills": [
+    "no-such-skill"
+  ],
+  "mcp_servers": []
+}

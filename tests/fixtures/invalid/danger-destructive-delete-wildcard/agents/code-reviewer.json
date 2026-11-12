@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "code-reviewer",
+  "version": "1.0.0",
+  "name": "code-reviewer",
+  "description": "Synthetic agent fixture",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "code-reviewer.md",
+  "skills": [],
+  "mcp_servers": [],
+  "technology_profiles": [],
+  "permissions": {
+    "tools": [
+      "Bash(rm -rf *)"
+    ],
+    "permission_mode": "default"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "kind": "result",
+  "execution_status": "DONE",
+  "validation_result": "PASS",
+  "files_changed": [
+    "src/parser/index.ts"
+  ],
+  "evidence": [
+    {
+      "description": "Unit tests pass",
+      "command": "npm test",
+      "output_summary": "12 passed"
+    }
+  ],
+  "warnings": [],
+  "unresolved_blockers": []
+}
