@@ -1,0 +1,46 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.secret
+secrets/
+credentials/
+credentials.json
+
+# Private keys and certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Sessions and tokens
+*.session
+*.token
+.auth/
+.credentials/
+
+# OS and editor local state
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs, caches, temp files
+*.log
+logs/
+.cache/
+tmp/
+temp/
+*.tmp
+
+# Local installer/config state
+.local/
+.installer-state/
+*.local.json
+*.local.yaml
+*.local.yml
