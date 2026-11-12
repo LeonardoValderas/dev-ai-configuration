@@ -1,14 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, readdirSync, readFileSync, writeFileSync, lstatSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, cpSync, readdirSync, readFileSync, writeFileSync, lstatSync, rmSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { validatePaths, loadSchemas, REPO_ROOT } from '../installer/lib/run.mjs';
 import { assertSupportedSchema, validateSchema } from '../installer/lib/schema.mjs';
-import { scanSecrets } from '../installer/lib/checks.mjs';
+import { scanSecrets, checkResult } from '../installer/lib/checks.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIX = join(HERE, 'fixtures');
@@ -26,8 +26,8 @@ const TOKENS = {
   LITERAL: 'Zx81QpLm20Vb77Tr',
   URLCRED: 'https://' + 'svc:' + 'hunter2hunter2' + '@db.example.com/x',
 };
-function materialize(dir) {
-  const tmp = mkdtempSync(join(tmpdir(), 'dac-fixture-'));
+function materialize(dir, parent = tmpdir()) {
+  const tmp = mkdtempSync(join(parent, 'dac-fixture-'));
   cpSync(dir, tmp, { recursive: true });
   const walk = (d) => {
     for (const n of readdirSync(d)) {
@@ -50,7 +50,7 @@ const snapshot = (dir) => {
   return h.digest('hex');
 };
 const matrix = join(REPO_ROOT, 'compatibility', 'matrix.json');
-const run = (dir) => validatePaths([dir], { matrixPath: matrix });
+const run = (dir) => validatePaths([dir], { root: dir });
 const cli = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
 
 test('schemas only use keywords the validator implements', () => {
@@ -106,13 +106,13 @@ test('each documented error code is covered by an invalid fixture', () => {
 });
 
 test('CLI exits 0 on valid, 1 on invalid, 2 on usage error; never modifies files', () => {
-  const good = materialize(join(FIX, 'valid', 'full-set'));
-  const bad = materialize(join(FIX, 'invalid', 'danger-force-push'));
+  const good = materialize(join(FIX, 'valid', 'full-set'), REPO_ROOT);
+  const bad = materialize(join(FIX, 'invalid', 'danger-force-push'), REPO_ROOT);
   try {
     const before = [snapshot(good), snapshot(bad)];
-    const g = cli('--matrix', matrix, good);
-    const b = cli('--matrix', matrix, bad);
-    const j = cli('--json', '--matrix', matrix, bad);
+    const g = cli(good);
+    const b = cli(bad);
+    const j = cli('--json', bad);
     assert.equal(g.status, 0, g.stdout + g.stderr);
     assert.equal(b.status, 1);
     assert.match(b.stdout, /DANGEROUS_PERMISSION\[force-push\]/);
@@ -151,4 +151,112 @@ test('repository contains no personal paths or secret-shaped values', () => {
 test('secret scanner allows env placeholders and names', () => {
   assert.deepEqual(scanSecrets('api_key=$API_KEY and token: ${TOKEN}'), []);
   assert.deepEqual(scanSecrets('env var API_TOKEN'), []);
+});
+
+test('COMPLETE/PASS requires useful evidence; other combinations are unaffected', () => {
+  const base = { kind: 'result', execution_status: 'COMPLETE', validation_result: 'PASS', unresolved_blockers: [] };
+  const rules = (d) => checkResult({ ...base, ...d }).map((e) => e.rule);
+  for (const evidence of [[], [{ description: '' }], [{ description: '   \n\t' }], [{ description: 'n/a' }], [{ description: '...' }], [{ description: 'ok.' }]]) {
+    assert.deepEqual(rules({ evidence }), ['empty-evidence'], JSON.stringify(evidence));
+  }
+  assert.deepEqual(rules({ evidence: [{ description: 'Unit tests pass', command: 'npm test' }] }), []);
+  assert.deepEqual(rules({ evidence: [{ description: ' ' }, { description: 'Ran npm test: 12 passed' }] }), []);
+  assert.deepEqual(rules({ execution_status: 'PARTIAL', validation_result: 'FAIL', evidence: [] }), []);
+  assert.deepEqual(rules({ execution_status: 'COMPLETE', validation_result: 'FAIL', evidence: [] }), []);
+  assert.deepEqual(rules({ execution_status: 'PARTIAL', validation_result: 'PASS', evidence: [] }), []);
+});
+
+// ---- path confinement (real filesystem, real CLI) ---------------------------
+// The sandbox lives inside REPO_ROOT (the CLI's fixed authorized root); the
+// "outside" targets live in a separate temp dir outside REPO_ROOT.
+function sandbox() {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'dac-conf-')));
+  const root = mkdtempSync(join(REPO_ROOT, '.dac-conf-'));
+  const outside = join(base, 'outside');
+  mkdirSync(outside);
+  cpSync(join(FIX, 'valid', 'full-set'), join(root, 'set'), { recursive: true });
+  cpSync(matrix, join(root, 'matrix.json'));
+  cpSync(matrix, join(outside, 'matrix.json'));
+  cpSync(join(FIX, 'valid', 'full-set'), join(outside, 'set'), { recursive: true });
+  return { base, root, outside, done: () => { rmSync(base, { recursive: true, force: true }); rmSync(root, { recursive: true, force: true }); } };
+}
+const firstFile = (d) => { const walk = (x) => readdirSync(x).flatMap((n) => (lstatSync(join(x, n)).isDirectory() ? walk(join(x, n)) : [join(x, n)])); return walk(d).find((f) => f.endsWith('.json')); };
+const rules = (r) => new Set(r.errors.map((e) => e.rule));
+
+test('confinement: in-root inputs and in-root --matrix are accepted', () => {
+  const s = sandbox();
+  try {
+    const r = cli('--matrix', join(s.root, 'matrix.json'), join(s.root, 'set'));
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  } finally { s.done(); }
+});
+
+test('confinement: --matrix symlink, matrix directory symlink, external matrix, traversal', () => {
+  const s = sandbox();
+  try {
+    symlinkSync(join(s.outside, 'matrix.json'), join(s.root, 'matrix-link.json'));
+    symlinkSync(s.outside, join(s.root, 'outdir-link'));
+    const set = join(s.root, 'set');
+    const cases = {
+      'matrix file symlink': [join(s.root, 'matrix-link.json'), 'symlink'],
+      'matrix dir symlink': [join(s.root, 'outdir-link', 'matrix.json'), 'symlink'],
+      'matrix external absolute': [join(s.outside, 'matrix.json'), 'outside-root'],
+      'matrix traversal': [join(s.root, '..', relative(REPO_ROOT, s.outside), 'matrix.json'), 'outside-root'],
+    };
+    for (const [label, [m, rule]] of Object.entries(cases)) {
+      const r = cli('--json', '--matrix', m, set);
+      assert.equal(r.status, 1, `${label}: ${r.stdout}${r.stderr}`);
+      assert.ok(JSON.parse(r.stdout).errors.some((e) => e.code === 'FILE_STRUCTURE' && e.rule === rule), label + r.stdout);
+      // api level
+      assert.ok(rules(validatePaths([set], { matrixPath: m })).has(rule), label);
+    }
+  } finally { s.done(); }
+});
+
+test('confinement: manifest symlink, directory symlink, external target, traversal, external absolute', () => {
+  const s = sandbox();
+  try {
+    const extFile = firstFile(join(s.outside, 'set'));
+    symlinkSync(extFile, join(s.root, 'file-link.json'));                 // manifest symlink -> external file
+    symlinkSync(join(s.outside, 'set'), join(s.root, 'dir-link'));       // directory symlink -> external dir
+    symlinkSync(firstFile(join(s.root, 'set')), join(s.root, 'internal-link.json')); // symlink to in-root target
+    symlinkSync(join(s.root, 'set'), join(s.root, 'internal-dir-link'));
+    const cases = {
+      'manifest symlink (external)': [join(s.root, 'file-link.json'), 'symlink'],
+      'manifest symlink (internal target)': [join(s.root, 'internal-link.json'), 'symlink'],
+      'directory symlink (external)': [join(s.root, 'dir-link'), 'symlink'],
+      'directory symlink (internal target)': [join(s.root, 'internal-dir-link'), 'symlink'],
+      'file via directory symlink': [join(s.root, 'dir-link', firstFile(join(s.outside, 'set')).slice(join(s.outside, 'set').length + 1)), 'symlink'],
+      'traversal': [join(s.root, '..', relative(REPO_ROOT, s.outside), 'set'), 'outside-root'],
+      'external absolute': [join(s.outside, 'set'), 'outside-root'],
+    };
+    for (const [label, [p, rule]] of Object.entries(cases)) {
+      const r = cli('--json', p);
+      assert.equal(r.status, 1, `${label}: ${r.stdout}${r.stderr}`);
+      const out = JSON.parse(r.stdout);
+      assert.ok(out.errors.some((e) => e.rule === rule), `${label}: ${r.stdout}`);
+      assert.equal(out.filesChecked, 0, `${label} must not read any file`);
+    }
+    // symlinked entry found while walking a directory is also rejected
+    mkdirSync(join(s.root, 'walk'));
+    symlinkSync(extFile, join(s.root, 'walk', 'x.json'));
+    const w = cli('--json', join(s.root, 'walk'));
+    assert.equal(w.status, 1);
+    assert.equal(JSON.parse(w.stdout).filesChecked, 0);
+  } finally { s.done(); }
+});
+
+test('confinement: root is fixed to the repository; external paths rejected; --root is not an option', () => {
+  const s = sandbox();
+  try {
+    const r = cli(join(s.outside, 'set'));
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /outside-root/);
+    assert.equal(cli('--matrix', join(s.outside, 'matrix.json'), join(s.root, 'set')).status, 1);
+    assert.equal(cli('/').status, 1);
+    assert.equal(cli('--root', s.root, join(s.root, 'set')).status, 2);
+    assert.equal(cli('--root', '/', join(s.outside, 'set')).status, 2);
+    assert.equal(cli('--root').status, 2);
+    assert.doesNotMatch(readFileSync(CLI, 'utf8'), /--root/);
+  } finally { s.done(); }
 });

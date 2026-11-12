@@ -79,6 +79,8 @@ See [docs/manifest-format.md](docs/manifest-format.md) and
 
 ## Current status: Phase 2B
 
+_This section is the single canonical phase-state reference; other documents link here._
+
 Phase 2A scaffold plus the shared contracts, schemas and validators above.
 `standards/manifests/` is intentionally empty: the following are **not yet
 included** and are planned for later phases:

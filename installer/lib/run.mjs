@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, lstatSync, existsSync } from 'node:fs';
 import { dirname, join, basename, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertSupportedSchema, validateSchema } from './schema.mjs';
+import { confine } from './confine.mjs';
 import { checkDangerous, checkPaths, checkSecrets, checkResult } from './checks.mjs';
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -57,12 +58,16 @@ function collectFiles(input, errors) {
 
 const getPath = (obj, dotted) => dotted.split('.').reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), obj);
 
-export function validatePaths(inputs, { matrixPath = DEFAULT_MATRIX } = {}) {
+export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
+  const matrixExplicit = matrixPath !== undefined;
+  if (!matrixExplicit) matrixPath = DEFAULT_MATRIX;
   const registry = loadSchemas();
   const errors = [];
   const docs = []; // { file, doc }
   const files = [];
   for (const input of inputs) {
+    const bad = confine(input, root);
+    if (bad) { errors.push({ code: 'FILE_STRUCTURE', rule: bad.rule, file: input, path: '$', message: bad.message }); continue; }
     if (!existsSync(input)) { errors.push({ code: 'FILE_STRUCTURE', rule: 'missing-input', file: input, path: '$', message: 'input does not exist' }); continue; }
     files.push(...collectFiles(input, errors));
   }
@@ -97,7 +102,7 @@ export function validatePaths(inputs, { matrixPath = DEFAULT_MATRIX } = {}) {
       if (typeof doc.instructions_path === 'string' && !doc.instructions_path.startsWith('/') && !doc.instructions_path.split(/[\\/]/).includes('..')) {
         const target = join(dirname(file), doc.instructions_path);
         let ok = false;
-        try { ok = lstatSync(target).isFile(); } catch { ok = false; }
+        try { ok = !confine(target, root) && lstatSync(target).isFile(); } catch { ok = false; }
         if (!ok) tag([{ code: 'MISSING_REFERENCE', rule: 'instructions-file', path: '$.instructions_path', message: `instructions file not found: ${doc.instructions_path}` }]);
       }
       valid.push({ file, doc });
@@ -126,7 +131,10 @@ export function validatePaths(inputs, { matrixPath = DEFAULT_MATRIX } = {}) {
   const matrices = docs.filter(({ doc }) => doc?.kind === 'compatibility-matrix');
   if (matrices.length > 1) errors.push({ code: 'DUPLICATE_ID', file: matrices[1].file, path: '$', message: 'more than one compatibility matrix supplied' });
   let matrix = matrices[0]?.doc;
-  if (!matrix) {
+  const matrixBad = (matrix && !matrixExplicit) ? null : confine(matrixPath, matrixExplicit ? root : REPO_ROOT);
+  if (matrixBad) {
+    errors.push({ code: 'FILE_STRUCTURE', rule: matrixBad.rule, file: matrixPath, path: '$', message: `matrix rejected: ${matrixBad.message}` });
+  } else if (!matrix) {
     if (existsSync(matrixPath)) {
       try { matrix = JSON.parse(readFileSync(matrixPath, 'utf8')); } catch { errors.push({ code: 'INVALID_JSON', file: matrixPath, path: '$', message: 'matrix is not valid JSON' }); }
     } else errors.push({ code: 'FILE_STRUCTURE', rule: 'missing-matrix', file: matrixPath, path: '$', message: 'compatibility matrix not found' });

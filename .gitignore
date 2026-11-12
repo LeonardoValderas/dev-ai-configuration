@@ -44,3 +44,7 @@ temp/
 *.local.json
 *.local.yaml
 *.local.yml
+
+# Runtime test scratch directories created inside the repo root
+/.dac-conf-*
+/dac-fixture-*

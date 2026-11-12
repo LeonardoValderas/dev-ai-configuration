@@ -113,6 +113,18 @@ export function checkSecrets(doc) {
 }
 
 // ---- result consistency ----------------------------------------------------
+// Structural check only: it rejects empty or placeholder evidence but cannot
+// verify that the evidence is truthful or that the described work happened.
+const PLACEHOLDER_EVIDENCE = new Set(['n/a', 'na', 'none', 'null', 'nil', 'tbd', 'todo', 'ok', 'pass', 'passed', 'nothing', 'empty', 'evidence', 'test', 'tests', 'done', 'complete', 'completed', 'unknown']);
+export function hasUsefulEvidence(evidence) {
+  if (!Array.isArray(evidence)) return false;
+  return evidence.some((item) => {
+    const d = typeof item?.description === 'string' ? item.description.trim().toLowerCase() : '';
+    if (PLACEHOLDER_EVIDENCE.has(d.replace(/[.!\s]+$/g, ''))) return false;
+    return (d.match(/[\p{L}\p{N}]/gu) ?? []).length >= 8;
+  });
+}
+
 export function checkResult(doc) {
   const errors = [];
   const blockers = Array.isArray(doc.unresolved_blockers) ? doc.unresolved_blockers.length : 0;
@@ -120,5 +132,8 @@ export function checkResult(doc) {
   if (doc.execution_status === 'COMPLETE' && blockers > 0) bad('COMPLETE result must not have unresolved_blockers');
   if (doc.execution_status === 'BLOCKED' && blockers === 0) bad('BLOCKED result must list unresolved_blockers');
   if (doc.execution_status === 'BLOCKED' && doc.validation_result === 'PASS') bad('BLOCKED execution cannot have validation_result PASS');
+  if (doc.execution_status === 'COMPLETE' && doc.validation_result === 'PASS' && Array.isArray(doc.evidence) && !hasUsefulEvidence(doc.evidence)) {
+    errors.push({ code: 'RESULT_INCONSISTENT', rule: 'empty-evidence', path: '$.evidence', message: 'COMPLETE/PASS result requires at least one evidence item with a meaningful description' });
+  }
   return errors;
 }

@@ -364,5 +364,11 @@
     "codes": [
       "RESULT_INCONSISTENT"
     ]
+  },
+  "result-complete-empty-evidence": {
+    "codes": [
+      "RESULT_INCONSISTENT"
+    ],
+    "rule": "empty-evidence"
   }
 }

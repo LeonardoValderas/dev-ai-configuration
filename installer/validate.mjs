@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 // Read-only validator CLI. Exit codes: 0 valid, 1 invalid, 2 usage error.
 import { resolve, relative, sep } from 'node:path';
-import { validatePaths, DEFAULT_INPUTS, DEFAULT_MATRIX } from './lib/run.mjs';
+import { validatePaths, DEFAULT_INPUTS, REPO_ROOT } from './lib/run.mjs';
 
 const USAGE = `Usage: node installer/validate.mjs [--json] [--matrix <file>] [path ...]
 Validates manifests, task contracts and results (files or directories).
-Default paths: standards/manifests and compatibility. Never modifies files.`;
+Default paths: standards/manifests and compatibility. Never modifies files.
+All paths and --matrix must lie inside this repository (the fixed authorized
+root). Symlinks are rejected, never followed.`;
 
 const args = process.argv.slice(2);
 let json = false;
-let matrixPath = DEFAULT_MATRIX;
+let matrixPath;
 const inputs = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
@@ -22,7 +24,7 @@ for (let i = 0; i < args.length; i++) {
 
 let result;
 try {
-  result = validatePaths(inputs.length ? inputs : DEFAULT_INPUTS, { matrixPath });
+  result = validatePaths(inputs.length ? inputs : DEFAULT_INPUTS, { matrixPath, root: REPO_ROOT });
 } catch (e) {
   console.error(`validator failure: ${e.message}`);
   process.exit(2);

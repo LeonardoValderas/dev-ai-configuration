@@ -53,7 +53,12 @@ exist (Markdown files next to manifests are allowed).
 (`PASS`|`FAIL`|`BLOCKED`), `files_changed`, `evidence[{description, command?,
 output_summary?}]`, `warnings`, `unresolved_blockers`. Consistency rules
 (`RESULT_INCONSISTENT`): `COMPLETE` must have no blockers; `BLOCKED` must list
-blockers and cannot be `PASS`.
+blockers and cannot be `PASS`. A `COMPLETE` result with `PASS` must also carry
+at least one `evidence` item whose `description` is meaningful (rule
+`empty-evidence`: empty, whitespace-only, punctuation-only, very short or
+placeholder text such as `n/a`/`none`/`ok` is rejected). This is a structural
+check only: the validator cannot verify that evidence is truthful or that the
+described work happened. Other status combinations are not affected.
 
 ## Compatibility matrix
 
@@ -73,6 +78,26 @@ npm test             # unit tests over all valid and invalid fixtures
 Exit codes: `0` valid, `1` validation errors, `2` usage error. It needs no
 network, credentials, or OpenClaw, and only reads files (it never writes,
 follows symlinks, or spawns processes; a test enforces this).
+
+### Path confinement policy
+
+The authorized root is always the repository root; the CLI has no option to
+change it (an unknown option such as `--root` is a usage error, exit 2).
+Every input file/directory, the `--matrix` file and
+manifest `instructions_path` targets must lie inside the root. Paths outside it
+(`../` traversal, external absolute paths) fail with `FILE_STRUCTURE`
+rule `outside-root`. Every path component below the root is checked with
+`lstat`: a symlink anywhere (file, directory, or an entry found while walking
+a directory) fails with rule `symlink` and is never followed or read; a final
+`realpath` boundary check backs this up. The root itself may be reached
+through symlinked parents (e.g. `/tmp`). The default matrix is the built-in
+`compatibility/matrix.json`. All of this is read-only (`lstat`/`realpath`/read).
+
+Caveat: confinement is a local, read-only guardrail, not a sandbox or an
+atomic filesystem security boundary. There is a narrow check-to-read (TOCTOU)
+window: if another process mutates the filesystem concurrently (e.g. swaps a
+checked path for a symlink), a read may occur after the check. Run the
+validator only on trees you trust not to change underneath it.
 
 Pass a whole directory tree so cross-file checks (duplicates, references) see
 every component. Error output: `ERROR <CODE>[rule] <file> <json-path>: message`.
