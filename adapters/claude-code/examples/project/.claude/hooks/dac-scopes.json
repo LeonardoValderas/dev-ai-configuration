@@ -1,0 +1,108 @@
+{
+  "agents": {
+    "repo-analyst": {
+      "read_only": true,
+      "tools": [
+        "Read",
+        "Glob",
+        "Grep"
+      ],
+      "writable_paths": []
+    },
+    "technical-planner": {
+      "read_only": true,
+      "tools": [
+        "Read",
+        "Glob",
+        "Grep"
+      ],
+      "writable_paths": []
+    },
+    "prompt-engineer": {
+      "read_only": true,
+      "tools": [
+        "Read",
+        "Glob",
+        "Grep"
+      ],
+      "writable_paths": []
+    },
+    "site-analyst": {
+      "read_only": true,
+      "tools": [
+        "Read",
+        "Glob",
+        "Grep"
+      ],
+      "writable_paths": []
+    },
+    "frontend-expert": {
+      "read_only": false,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Edit",
+        "Write"
+      ],
+      "writable_paths": [
+        "src/**",
+        "tests/**"
+      ]
+    },
+    "backend-expert": {
+      "read_only": false,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Edit",
+        "Write"
+      ],
+      "writable_paths": [
+        "src/**",
+        "tests/**"
+      ]
+    },
+    "kmp-expert": {
+      "read_only": false,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Edit",
+        "Write"
+      ],
+      "writable_paths": [
+        "shared/**",
+        "composeApp/**",
+        "androidApp/**",
+        "iosApp/**",
+        "tests/**"
+      ]
+    },
+    "e2e-tester": {
+      "read_only": false,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Edit",
+        "Write"
+      ],
+      "writable_paths": [
+        "e2e/**",
+        "tests/**"
+      ]
+    },
+    "code-reviewer": {
+      "read_only": true,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "writable_paths": []
+    }
+  }
+}

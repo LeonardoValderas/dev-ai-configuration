@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/sdd-project.schema.json",
+  "title": "SDD project record: artifacts, approvals, scope and validation for one piece of work",
+  "type": "object",
+  "required": ["kind", "schema_version", "id", "mode", "objective", "completed_phases", "skipped_phases", "scope", "requirements", "acceptance_criteria", "decisions", "tasks", "risks", "approvals", "files_changed", "validation"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "sdd-project" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "mode": { "$ref": "common.schema.json#/$defs/id" },
+    "objective": { "$ref": "common.schema.json#/$defs/text" },
+    "milestone_ref": { "$ref": "common.schema.json#/$defs/path" },
+    "completed_phases": { "$ref": "common.schema.json#/$defs/idList" },
+    "skipped_phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["phase", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "phase": { "$ref": "common.schema.json#/$defs/id" },
+          "reason": { "$ref": "common.schema.json#/$defs/text" }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["allowed_paths", "prohibited_paths"],
+      "additionalProperties": false,
+      "properties": {
+        "allowed_paths": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/path" } },
+        "prohibited_paths": { "$ref": "common.schema.json#/$defs/pathList" }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "acceptance_criteria", "open_questions"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "statement": { "$ref": "common.schema.json#/$defs/text" },
+          "acceptance_criteria": { "$ref": "common.schema.json#/$defs/idList" },
+          "open_questions": { "$ref": "common.schema.json#/$defs/textList" }
+        }
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "requirement", "statement", "verification"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "requirement": { "$ref": "common.schema.json#/$defs/id" },
+          "statement": { "$ref": "common.schema.json#/$defs/text" },
+          "verification": { "$ref": "common.schema.json#/$defs/text" }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "rationale", "requirements"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "statement": { "$ref": "common.schema.json#/$defs/text" },
+          "rationale": { "$ref": "common.schema.json#/$defs/text" },
+          "requirements": { "$ref": "common.schema.json#/$defs/idList" }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "owner", "change_type", "status", "requirements", "acceptance_criteria", "paths"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "title": { "$ref": "common.schema.json#/$defs/text" },
+          "owner": { "$ref": "common.schema.json#/$defs/id" },
+          "change_type": { "enum": ["code", "test", "docs", "config", "migration", "production-schema", "production-mutation", "deployment"] },
+          "status": { "enum": ["planned", "in-progress", "done"] },
+          "requirements": { "$ref": "common.schema.json#/$defs/idList" },
+          "acceptance_criteria": { "$ref": "common.schema.json#/$defs/idList" },
+          "paths": { "$ref": "common.schema.json#/$defs/pathList" }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "severity", "mitigation", "tasks"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "description": { "$ref": "common.schema.json#/$defs/text" },
+          "severity": { "enum": ["low", "medium", "high"] },
+          "mitigation": { "$ref": "common.schema.json#/$defs/text" },
+          "tasks": { "$ref": "common.schema.json#/$defs/idList" }
+        }
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["gate", "granted", "approver_type", "approver", "reference"],
+        "additionalProperties": false,
+        "properties": {
+          "gate": { "$ref": "common.schema.json#/$defs/id" },
+          "granted": { "type": "boolean" },
+          "approver_type": { "const": "human" },
+          "approver": { "$ref": "common.schema.json#/$defs/text" },
+          "reference": { "$ref": "common.schema.json#/$defs/text" }
+        }
+      }
+    },
+    "files_changed": { "$ref": "common.schema.json#/$defs/pathList" },
+    "validation": {
+      "type": "object",
+      "required": ["validation_result", "validated_by", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "validation_result": { "enum": ["PASS", "FAIL", "BLOCKED", "NOT-RUN"] },
+        "validated_by": { "type": "string", "pattern": "^([a-z][a-z0-9]*(-[a-z0-9]+)*)?$" },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["description", "criteria"],
+            "additionalProperties": false,
+            "properties": {
+              "description": { "$ref": "common.schema.json#/$defs/text" },
+              "command": { "type": "string" },
+              "output_summary": { "type": "string" },
+              "criteria": { "$ref": "common.schema.json#/$defs/idList" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

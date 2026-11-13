@@ -1,0 +1,17 @@
+{
+  "kind": "sdd-agent-map",
+  "schema_version": "1.0",
+  "version": "1.0.0",
+  "description": "Maps the eight primary agents, plus the independent code-reviewer, to SDD phases. Data only: agent manifests are unchanged. Agents absent from this map cannot own SDD tasks.",
+  "agents": [
+    { "agent": "repo-analyst", "role": "analyst", "phases": ["constitution", "clarify", "analyze"], "may_implement": false, "rationale": "Read-only repository analysis grounds the constitution, answers factual open questions and checks consistency." },
+    { "agent": "technical-planner", "role": "planner", "phases": ["specify", "plan", "checklist", "tasks", "analyze"], "may_implement": false, "rationale": "Advisor that structures requirements, decisions, task breakdown and cross-artifact analysis." },
+    { "agent": "prompt-engineer", "role": "specifier", "phases": ["specify", "clarify"], "may_implement": false, "rationale": "Sharpens requirement and acceptance-criterion wording so they are unambiguous and testable." },
+    { "agent": "site-analyst", "role": "analyst", "phases": ["specify", "clarify"], "may_implement": false, "rationale": "Supplies verified observations of an existing site as requirement input and resolves factual questions." },
+    { "agent": "frontend-expert", "role": "implementer", "phases": ["implement", "converge"], "may_implement": true, "rationale": "Implements and reconciles frontend tasks inside the declared scope." },
+    { "agent": "backend-expert", "role": "implementer", "phases": ["implement", "converge"], "may_implement": true, "rationale": "Implements and reconciles backend tasks inside the declared scope." },
+    { "agent": "kmp-expert", "role": "implementer", "phases": ["implement", "converge"], "may_implement": true, "rationale": "Implements and reconciles Kotlin Multiplatform tasks inside the declared scope." },
+    { "agent": "e2e-tester", "role": "implementer", "phases": ["checklist", "implement", "converge"], "may_implement": true, "rationale": "Reviews testability of requirements and authors end-to-end tests as tasks; as an implementer it is not an independent validator." },
+    { "agent": "code-reviewer", "role": "independent-validator", "phases": ["independent-validation"], "may_implement": false, "rationale": "Strictly read-only reviewer independent of every implementer; the only agent eligible for the final gate." }
+  ]
+}

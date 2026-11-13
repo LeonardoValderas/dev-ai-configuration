@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "kind": "adapter",
+  "id": "claude-code",
+  "version": "0.1.0",
+  "name": "Claude Code project adapter",
+  "description": "Transforms canonical agents, approved CORE skills, SDD rules and contracts into Claude Code project-scoped files. Generation and application are offline; permissions never exceed the canonical manifests.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "target_tool": "claude-code",
+  "tool_versions": {
+    "min": "2.1.318"
+  },
+  "output_dir": ".claude",
+  "supports": {
+    "agents": [
+      "repo-analyst",
+      "technical-planner",
+      "prompt-engineer",
+      "site-analyst",
+      "frontend-expert",
+      "backend-expert",
+      "kmp-expert",
+      "e2e-tester",
+      "code-reviewer"
+    ]
+  }
+}
