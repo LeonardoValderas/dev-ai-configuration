@@ -1,0 +1,121 @@
+{
+  "kind": "mcp-catalog",
+  "schema_version": "1.0",
+  "id": "portable-mcp-catalog",
+  "entries": [
+    {
+      "id": "context7",
+      "classification": "OPTIONAL",
+      "auto_enable": false,
+      "manifest_id": "context7"
+    },
+    {
+      "id": "chrome-devtools",
+      "classification": "QUARANTINED",
+      "auto_enable": false,
+      "inventory": {
+        "presence": "observed",
+        "source": "claude-user-mcp",
+        "provenance": "local-observation-2026-11-13",
+        "origin": "unverified",
+        "version": "unverified",
+        "transport": "stdio",
+        "risk": "high",
+        "permissions": [],
+        "required_env_vars": [],
+        "env_requirements": "unverified-observed-names-only",
+        "dependencies": [
+          "Browser runtime; details unverified"
+        ],
+        "reason": "Observed moving package tag; no exact version verified. Browser control may expose sessions and mutate pages."
+      }
+    },
+    {
+      "id": "firecrawl",
+      "classification": "QUARANTINED",
+      "auto_enable": false,
+      "inventory": {
+        "presence": "observed",
+        "source": "claude-user-mcp",
+        "provenance": "local-observation-2026-11-13",
+        "origin": "unverified",
+        "version": "unverified",
+        "transport": "remote-unverified",
+        "risk": "high",
+        "permissions": [],
+        "required_env_vars": [],
+        "env_requirements": "unverified-observed-names-only",
+        "dependencies": [
+          "External service; authentication requirements unverified"
+        ],
+        "reason": "Private endpoint omitted. Origin, transport subtype and version unverified; external data disclosure risk."
+      }
+    },
+    {
+      "id": "n8n-mcp",
+      "classification": "QUARANTINED",
+      "auto_enable": false,
+      "inventory": {
+        "presence": "observed",
+        "source": "claude-user-mcp",
+        "provenance": "local-observation-2026-11-13",
+        "origin": "unverified",
+        "version": "unverified",
+        "transport": "stdio",
+        "risk": "high",
+        "permissions": [],
+        "required_env_vars": [
+          "N8N_API_URL",
+          "N8N_API_KEY"
+        ],
+        "env_requirements": "unverified-observed-names-only",
+        "dependencies": [
+          "n8n service; runtime and authentication requirements unverified"
+        ],
+        "reason": "Observed unpinned package; workflow and API mutations may be possible."
+      }
+    },
+    {
+      "id": "cmem",
+      "classification": "QUARANTINED",
+      "auto_enable": false,
+      "inventory": {
+        "presence": "observed",
+        "source": "claude-user-mcp",
+        "provenance": "local-observation-2026-11-13",
+        "origin": "unverified",
+        "version": "unverified",
+        "transport": "remote-unverified",
+        "risk": "high",
+        "permissions": [],
+        "required_env_vars": [],
+        "env_requirements": "unverified-observed-names-only",
+        "dependencies": [
+          "Private service; requirements unverified"
+        ],
+        "reason": "Private endpoint omitted. Persistence, read/write capabilities and origin unverified."
+      }
+    },
+    {
+      "id": "exa",
+      "classification": "QUARANTINED",
+      "auto_enable": false,
+      "inventory": {
+        "presence": "not-observed",
+        "source": "checked-user-config-files",
+        "provenance": "local-observation-2026-11-13",
+        "origin": "unverified",
+        "version": "unverified",
+        "transport": "unknown",
+        "risk": "unknown",
+        "permissions": [],
+        "required_env_vars": [],
+        "env_requirements": "unverified-observed-names-only",
+        "dependencies": [
+          "Unknown"
+        ],
+        "reason": "Not observed in checked files; retained as an unverified reference, not an installed-server claim."
+      }
+    }
+  ]
+}

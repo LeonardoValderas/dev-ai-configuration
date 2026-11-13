@@ -1,0 +1,439 @@
+[
+  {
+    "name": "auto_enable",
+    "file": "context7.json",
+    "path": [
+      "portable",
+      "auto_enable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "permissions",
+    "file": "context7.json",
+    "path": [
+      "portable",
+      "permissions"
+    ],
+    "value": [
+      "documentation:read",
+      "shell:execute"
+    ],
+    "remove": false
+  },
+  {
+    "name": "package",
+    "file": "context7.json",
+    "path": [
+      "portable",
+      "package"
+    ],
+    "value": "@upstash/context7-mcp@latest",
+    "remove": false
+  },
+  {
+    "name": "origin",
+    "file": "context7.json",
+    "path": [
+      "portable",
+      "origin"
+    ],
+    "value": "http://github.com/upstash/context7",
+    "remove": false
+  },
+  {
+    "name": "classification",
+    "file": "context7.json",
+    "path": [
+      "portable",
+      "classification"
+    ],
+    "value": "CORE",
+    "remove": false
+  },
+  {
+    "name": "risk",
+    "file": "context7.json",
+    "path": [
+      "portable",
+      "risk"
+    ],
+    "value": "low",
+    "remove": false
+  },
+  {
+    "name": "required_env_vars",
+    "file": "context7.json",
+    "path": [
+      "portable",
+      "required_env_vars"
+    ],
+    "value": [
+      "CONTEXT7_API_KEY"
+    ],
+    "remove": false
+  },
+  {
+    "name": "optional_env_vars",
+    "file": "context7.json",
+    "path": [
+      "portable",
+      "optional_env_vars"
+    ],
+    "value": [],
+    "remove": false
+  },
+  {
+    "name": "missing portable policy",
+    "file": "context7.json",
+    "path": [
+      "portable"
+    ],
+    "value": null,
+    "remove": true
+  },
+  {
+    "name": "read-write",
+    "file": "context7.json",
+    "path": [
+      "access"
+    ],
+    "value": "read-write",
+    "remove": false
+  },
+  {
+    "name": "admin",
+    "file": "context7.json",
+    "path": [
+      "access"
+    ],
+    "value": "admin",
+    "remove": false
+  },
+  {
+    "name": "inline env values",
+    "file": "context7.json",
+    "path": [
+      "env"
+    ],
+    "value": {
+      "CONTEXT7_API_KEY": "synthetic-placeholder"
+    },
+    "remove": false
+  },
+  {
+    "name": "inline headers",
+    "file": "context7.json",
+    "path": [
+      "headers"
+    ],
+    "value": {
+      "Authorization": "synthetic-placeholder"
+    },
+    "remove": false
+  },
+  {
+    "name": "context7 command",
+    "file": "context7.json",
+    "path": [
+      "command"
+    ],
+    "value": "npx",
+    "remove": false
+  },
+  {
+    "name": "context7 args",
+    "file": "context7.json",
+    "path": [
+      "args"
+    ],
+    "value": [
+      "@upstash/context7-mcp@4.6.0"
+    ],
+    "remove": false
+  },
+  {
+    "name": "context7 endpoint substitution",
+    "file": "context7.json",
+    "path": [
+      "url"
+    ],
+    "value": "https://example.invalid/mcp",
+    "remove": false
+  },
+  {
+    "name": "catalog auto enable",
+    "file": "mcp-catalog.json",
+    "path": [
+      "entries",
+      1,
+      "auto_enable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "catalog excessive permissions",
+    "file": "mcp-catalog.json",
+    "path": [
+      "entries",
+      1,
+      "inventory",
+      "permissions"
+    ],
+    "value": [
+      "*"
+    ],
+    "remove": false
+  },
+  {
+    "name": "catalog unverified origin guessed",
+    "file": "mcp-catalog.json",
+    "path": [
+      "entries",
+      1,
+      "inventory",
+      "origin"
+    ],
+    "value": "https://example.invalid",
+    "remove": false
+  },
+  {
+    "name": "claude-code syntax mixup",
+    "file": "templates/claude-code.json",
+    "path": [
+      "server_container"
+    ],
+    "value": "mcp_servers",
+    "remove": false
+  },
+  {
+    "name": "claude-code compatibility claim",
+    "file": "templates/claude-code.json",
+    "path": [
+      "status"
+    ],
+    "value": "tested",
+    "remove": false
+  },
+  {
+    "name": "claude-code auto enable",
+    "file": "templates/claude-code.json",
+    "path": [
+      "auto_enable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "claude-code executable",
+    "file": "templates/claude-code.json",
+    "path": [
+      "executable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "claude-code missing policy reference",
+    "file": "templates/claude-code.json",
+    "path": [
+      "policy_ref"
+    ],
+    "value": null,
+    "remove": true
+  },
+  {
+    "name": "claude-code duplicated instructions",
+    "file": "templates/claude-code.json",
+    "path": [
+      "instructions"
+    ],
+    "value": "Always query docs",
+    "remove": false
+  },
+  {
+    "name": "codex-config syntax mixup",
+    "file": "templates/codex-config.json",
+    "path": [
+      "server_container"
+    ],
+    "value": "mcpServers",
+    "remove": false
+  },
+  {
+    "name": "codex-config compatibility claim",
+    "file": "templates/codex-config.json",
+    "path": [
+      "status"
+    ],
+    "value": "tested",
+    "remove": false
+  },
+  {
+    "name": "codex-config auto enable",
+    "file": "templates/codex-config.json",
+    "path": [
+      "auto_enable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "codex-config executable",
+    "file": "templates/codex-config.json",
+    "path": [
+      "executable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "codex-config missing policy reference",
+    "file": "templates/codex-config.json",
+    "path": [
+      "policy_ref"
+    ],
+    "value": null,
+    "remove": true
+  },
+  {
+    "name": "codex-config duplicated instructions",
+    "file": "templates/codex-config.json",
+    "path": [
+      "instructions"
+    ],
+    "value": "Always query docs",
+    "remove": false
+  },
+  {
+    "name": "codex-plugin syntax mixup",
+    "file": "templates/codex-plugin.json",
+    "path": [
+      "server_container"
+    ],
+    "value": "mcp_servers",
+    "remove": false
+  },
+  {
+    "name": "codex-plugin compatibility claim",
+    "file": "templates/codex-plugin.json",
+    "path": [
+      "status"
+    ],
+    "value": "tested",
+    "remove": false
+  },
+  {
+    "name": "codex-plugin auto enable",
+    "file": "templates/codex-plugin.json",
+    "path": [
+      "auto_enable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "codex-plugin executable",
+    "file": "templates/codex-plugin.json",
+    "path": [
+      "executable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "codex-plugin missing policy reference",
+    "file": "templates/codex-plugin.json",
+    "path": [
+      "policy_ref"
+    ],
+    "value": null,
+    "remove": true
+  },
+  {
+    "name": "codex-plugin duplicated instructions",
+    "file": "templates/codex-plugin.json",
+    "path": [
+      "instructions"
+    ],
+    "value": "Always query docs",
+    "remove": false
+  },
+  {
+    "name": "cursor syntax mixup",
+    "file": "templates/cursor.json",
+    "path": [
+      "server_container"
+    ],
+    "value": "mcp_servers",
+    "remove": false
+  },
+  {
+    "name": "cursor compatibility claim",
+    "file": "templates/cursor.json",
+    "path": [
+      "status"
+    ],
+    "value": "tested",
+    "remove": false
+  },
+  {
+    "name": "cursor auto enable",
+    "file": "templates/cursor.json",
+    "path": [
+      "auto_enable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "cursor executable",
+    "file": "templates/cursor.json",
+    "path": [
+      "executable"
+    ],
+    "value": true,
+    "remove": false
+  },
+  {
+    "name": "cursor missing policy reference",
+    "file": "templates/cursor.json",
+    "path": [
+      "policy_ref"
+    ],
+    "value": null,
+    "remove": true
+  },
+  {
+    "name": "cursor duplicated instructions",
+    "file": "templates/cursor.json",
+    "path": [
+      "instructions"
+    ],
+    "value": "Always query docs",
+    "remove": false
+  },
+  {
+    "name": "plugin uses Claude transport type",
+    "file": "templates/codex-plugin.json",
+    "path": [
+      "remote_type"
+    ],
+    "value": "http",
+    "remove": false
+  },
+  {
+    "name": "Cursor uses Claude type field",
+    "file": "templates/cursor.json",
+    "path": [
+      "remote_fields"
+    ],
+    "value": [
+      "type",
+      "url"
+    ],
+    "remove": false
+  }
+]
