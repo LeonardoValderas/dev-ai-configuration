@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "payment-integration",
+  "version": "1.0.0",
+  "name": "payment-integration",
+  "description": "Implements secure payment, billing and webhook integrations within the task contract.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "payment-integration.md",
+  "function": "implementer",
+  "read_only": false,
+  "activation": [
+    "The task touches payment providers, checkout, subscriptions, billing or payment webhooks"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 15
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write"
+    ],
+    "shell_commands": [
+      "git diff",
+      "git status",
+      "npm test"
+    ],
+    "writable_paths": [
+      "src/**",
+      "tests/**"
+    ],
+    "permission_mode": "default",
+    "production_access": "none"
+  }
+}

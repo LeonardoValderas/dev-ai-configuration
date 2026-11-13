@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/agent-catalog.schema.json",
+  "title": "Portable agent catalog (inventory and classification of the original agents)",
+  "type": "object",
+  "required": ["kind", "schema_version", "version", "description", "expected", "agents"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "agent-catalog" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "expected": {
+      "type": "object",
+      "required": ["total", "primary"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 1 },
+        "primary": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "classification", "provenance", "responsibilities", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "classification": { "enum": ["primary", "optional", "redundant"] },
+          "provenance": { "const": "original-agent-file" },
+          "responsibilities": { "$ref": "common.schema.json#/$defs/text" },
+          "rationale": { "$ref": "common.schema.json#/$defs/text" },
+          "superseded_by": { "$ref": "common.schema.json#/$defs/id" }
+        }
+      }
+    }
+  }
+}

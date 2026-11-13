@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "e2e-tester",
+  "version": "1.0.0",
+  "name": "e2e-tester",
+  "description": "Runs and authors end-to-end tests and reports PASS, FAIL, BLOCKED or NOT_RUN with evidence.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "e2e-tester.md",
+  "function": "implementer",
+  "read_only": false,
+  "activation": [
+    "A running web flow must be tested end to end or regression-tested",
+    "E2E tests must be added and the task contract authorizes test files"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 15
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write"
+    ],
+    "shell_commands": [
+      "git diff",
+      "git status",
+      "npm test"
+    ],
+    "writable_paths": [
+      "e2e/**",
+      "tests/**"
+    ],
+    "permission_mode": "default",
+    "production_access": "none"
+  }
+}

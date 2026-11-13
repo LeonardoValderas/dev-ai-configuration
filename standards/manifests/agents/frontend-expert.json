@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "frontend-expert",
+  "version": "1.0.0",
+  "name": "frontend-expert",
+  "description": "Implements accessible, responsive, consistent frontend changes within the task contract.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "frontend-expert.md",
+  "function": "implementer",
+  "read_only": false,
+  "activation": [
+    "The task touches UI, components, styling, forms or client-side behavior",
+    "A task contract names frontend paths in allowed_paths"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 25
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write"
+    ],
+    "shell_commands": [
+      "git diff",
+      "git status",
+      "npm test"
+    ],
+    "writable_paths": [
+      "src/**",
+      "tests/**"
+    ],
+    "permission_mode": "default",
+    "production_access": "none"
+  }
+}

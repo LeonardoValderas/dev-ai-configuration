@@ -1,0 +1,98 @@
+{
+  "kind": "agent-catalog",
+  "schema_version": "1.0",
+  "version": "2.0.0",
+  "description": "Portable catalog of the 12 original agents (names, responsibilities and classification recovered from the original agent definitions and rewritten portably). 8 primary specialists; code-reviewer and payment-integration optional; two redundant agents superseded by primaries.",
+  "expected": {
+    "total": 12,
+    "primary": 8
+  },
+  "agents": [
+    {
+      "id": "repo-analyst",
+      "classification": "primary",
+      "provenance": "original-agent-file",
+      "responsibilities": "Read-only evidence-based analysis of a codebase: architecture, dependencies, data flows, technical debt.",
+      "rationale": "Foundation of the analysis, planning, prompt, implementation flow; no write access needed."
+    },
+    {
+      "id": "technical-planner",
+      "classification": "primary",
+      "provenance": "original-agent-file",
+      "responsibilities": "Turns verified analysis and requirements into implementation plans, acceptance criteria and implementation prompts. Planning only.",
+      "rationale": "Separates planning from implementation; read-only."
+    },
+    {
+      "id": "prompt-engineer",
+      "classification": "primary",
+      "provenance": "original-agent-file",
+      "responsibilities": "Converts verified reports and requirements into concise executable prompts with acceptance criteria. Prompt preparation only.",
+      "rationale": "Prompt preparation is a distinct read-only step."
+    },
+    {
+      "id": "site-analyst",
+      "classification": "primary",
+      "provenance": "original-agent-file",
+      "responsibilities": "Live website and UI analysis: responsive design, accessibility, UX, with explicit evidence types.",
+      "rationale": "Observation-only audit of a running site; no repository changes."
+    },
+    {
+      "id": "frontend-expert",
+      "classification": "primary",
+      "provenance": "original-agent-file",
+      "responsibilities": "Frontend implementation: React, Next.js, TypeScript, accessibility, responsive UI, UI testing.",
+      "rationale": "Core client-side implementer; also covers the former frontend-developer scope."
+    },
+    {
+      "id": "backend-expert",
+      "classification": "primary",
+      "provenance": "original-agent-file",
+      "responsibilities": "Backend implementation: Node.js, TypeScript, APIs, Supabase, PostgreSQL, authn/authz, integrations, backend testing.",
+      "rationale": "Core server-side implementer; also covers the former backend-architect scope."
+    },
+    {
+      "id": "kmp-expert",
+      "classification": "primary",
+      "provenance": "original-agent-file",
+      "responsibilities": "Kotlin Multiplatform implementation: Android/iOS shared code, Compose Multiplatform, Swift interop, coroutines, persistence, mobile builds.",
+      "rationale": "Only mobile/KMP specialist."
+    },
+    {
+      "id": "e2e-tester",
+      "classification": "primary",
+      "provenance": "original-agent-file",
+      "responsibilities": "End-to-end QA: Playwright and browser automation, regression, accessibility, reproducible test reports.",
+      "rationale": "Independent evidence-based testing of running flows."
+    },
+    {
+      "id": "code-reviewer",
+      "classification": "optional",
+      "provenance": "original-agent-file",
+      "responsibilities": "Independent code review: quality, security vulnerabilities, error handling, tests, dependencies, performance.",
+      "rationale": "Independent of the eight execution specialists, strictly read-only, activated when a diff needs review."
+    },
+    {
+      "id": "payment-integration",
+      "classification": "optional",
+      "provenance": "original-agent-file",
+      "responsibilities": "Payment integration: Stripe/PayPal/Square, checkout, subscriptions, webhooks, PCI, idempotency.",
+      "rationale": "Specialized domain used only for payment work; not part of the core eight."
+    },
+    {
+      "id": "backend-architect",
+      "classification": "redundant",
+      "provenance": "original-agent-file",
+      "responsibilities": "Backend architecture and API design: API paradigm selection, service boundaries, schemas, event-driven design, observability.",
+      "rationale": "Its design guidance (API design, schema design, authn/authz, observability) is covered by backend-expert, with planning handled by technical-planner; no unique contract or write scope.",
+      "superseded_by": "backend-expert"
+    },
+    {
+      "id": "frontend-developer",
+      "classification": "redundant",
+      "provenance": "original-agent-file",
+      "responsibilities": "Multi-framework frontend development (React, Vue, Angular) with tooling and accessibility defaults.",
+      "rationale": "Generic framework checklist with no unique contract; implementation, accessibility and performance covered by frontend-expert. Vue/Angular-specific work should be requested through frontend-expert and its task contract.",
+      "superseded_by": "frontend-expert"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "prompt-engineer",
+  "version": "1.0.0",
+  "name": "prompt-engineer",
+  "description": "Read-only prompt engineer producing self-contained implementation prompts from verified inputs.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "prompt-engineer.md",
+  "function": "advisor",
+  "read_only": true,
+  "activation": [
+    "Verified requirements or a plan must become an executable implementation prompt",
+    "A prompt for a coding agent needs acceptance criteria, constraints and validation instructions"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 0
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Glob",
+      "Grep"
+    ],
+    "permission_mode": "plan",
+    "production_access": "none"
+  }
+}

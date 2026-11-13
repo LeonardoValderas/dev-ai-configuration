@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "code-reviewer",
+  "version": "1.0.0",
+  "name": "code-reviewer",
+  "description": "Strictly read-only independent reviewer of code quality, security and best practices in a diff.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "code-reviewer.md",
+  "function": "reviewer",
+  "read_only": true,
+  "independent_of": [
+    "backend-expert",
+    "frontend-expert",
+    "kmp-expert",
+    "e2e-tester",
+    "payment-integration"
+  ],
+  "activation": [
+    "An implementer reports a task COMPLETE or PARTIAL and a diff exists",
+    "A review is required by the task contract"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 0
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "shell_commands": [
+      "git diff",
+      "git status",
+      "git log",
+      "git show"
+    ],
+    "permission_mode": "plan",
+    "production_access": "none"
+  }
+}

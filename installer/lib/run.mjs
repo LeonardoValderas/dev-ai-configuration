@@ -4,6 +4,7 @@ import { dirname, join, basename, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertSupportedSchema, validateSchema } from './schema.mjs';
 import { confine } from './confine.mjs';
+import { checkAgentPolicy, checkCatalog, checkRuntimeCoupling, checkInstructionsCoupling } from './agents.mjs';
 import { checkDangerous, checkPaths, checkSecrets, checkResult } from './checks.mjs';
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -13,6 +14,7 @@ export const DEFAULT_INPUTS = [join(REPO_ROOT, 'standards', 'manifests'), join(R
 
 const KIND_SCHEMA = {
   agent: 'agent-manifest.schema.json',
+  'agent-catalog': 'agent-catalog.schema.json',
   skill: 'skill-manifest.schema.json',
   mcp: 'mcp-manifest.schema.json',
   adapter: 'adapter-manifest.schema.json',
@@ -23,7 +25,7 @@ const KIND_SCHEMA = {
 };
 const MANIFEST_KINDS = new Set(['agent', 'skill', 'mcp', 'adapter', 'technology-profile']);
 const REFERENCES = {
-  agent: [['skills', 'skill'], ['mcp_servers', 'mcp'], ['technology_profiles', 'technology-profile']],
+  agent: [['independent_of', 'agent'], ['skills', 'skill'], ['mcp_servers', 'mcp'], ['technology_profiles', 'technology-profile']],
   skill: [['requires_mcp', 'mcp']],
   adapter: [['supports.agents', 'agent'], ['supports.skills', 'skill'], ['supports.mcp_servers', 'mcp'], ['supports.technology_profiles', 'technology-profile']],
   'technology-profile': [['skills', 'skill'], ['mcp_servers', 'mcp']],
@@ -85,6 +87,8 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
 
   // per-document checks
   const valid = [];
+  const catalogs = [];
+  const schemaFailed = new Set();
   for (const { file, doc } of docs) {
     const tag = (list) => list.forEach((e) => errors.push({ ...e, file }));
     if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) { tag([{ code: 'SCHEMA_WRONG_TYPE', path: '$', message: 'document must be an object' }]); continue; }
@@ -93,10 +97,13 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
     if (!schemaFile) { tag([{ code: 'UNKNOWN_KIND', path: '$.kind', message: `unknown kind "${doc.kind}"` }]); continue; }
     const schemaErrors = validateSchema(registry.get(schemaFile), doc, registry);
     tag(schemaErrors);
+    if (schemaErrors.length) schemaFailed.add(file);
     tag(checkPaths(doc));
     tag(checkSecrets(doc));
     if (doc.kind !== 'compatibility-matrix') tag(checkDangerous(doc));
     if (doc.kind === 'result') tag(checkResult(doc));
+    if (doc.kind === 'agent' || doc.kind === 'agent-catalog') tag(checkRuntimeCoupling(doc));
+    if (doc.kind === 'agent-catalog' && schemaErrors.length === 0) catalogs.push({ file, doc });
     if (MANIFEST_KINDS.has(doc.kind) && typeof doc.id === 'string') {
       if (basename(file) !== `${doc.id}.json`) tag([{ code: 'FILE_STRUCTURE', rule: 'filename-mismatch', path: '$.id', message: `file name must be "${doc.id}.json"` }]);
       if (typeof doc.instructions_path === 'string' && !doc.instructions_path.startsWith('/') && !doc.instructions_path.split(/[\\/]/).includes('..')) {
@@ -104,6 +111,7 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
         let ok = false;
         try { ok = !confine(target, root) && lstatSync(target).isFile(); } catch { ok = false; }
         if (!ok) tag([{ code: 'MISSING_REFERENCE', rule: 'instructions-file', path: '$.instructions_path', message: `instructions file not found: ${doc.instructions_path}` }]);
+        else if (doc.kind === 'agent') tag(checkInstructionsCoupling(readFileSync(target, 'utf8')));
       }
       valid.push({ file, doc });
     }
@@ -125,6 +133,18 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
         if (!ids.get(kind)?.has(ref)) errors.push({ code: 'MISSING_REFERENCE', rule: 'component', file, path: `$.${field}`, message: `${kind} "${ref}" is not defined` });
       }
     }
+  }
+
+  // agent policy and catalog consistency (only schema-valid documents)
+  if (catalogs.length > 1) errors.push({ code: 'DUPLICATE_ID', file: catalogs[1].file, path: '$', message: 'more than one agent catalog supplied' });
+  const agentDocs = new Map();
+  for (const { file, doc } of valid) if (doc.kind === 'agent' && !schemaFailed.has(file)) agentDocs.set(doc.id, { file, doc });
+  const linked = new Set(catalogs[0]?.doc.agents.filter((e) => e.classification !== 'redundant').map((e) => e.id) ?? []);
+  for (const [id, { file, doc }] of agentDocs) {
+    for (const e of checkAgentPolicy(doc, { strict: linked.has(id) })) errors.push({ ...e, file });
+  }
+  if (catalogs[0]) {
+    for (const e of checkCatalog(catalogs[0].doc, new Map([...agentDocs].map(([id, v]) => [id, v.doc])))) errors.push({ ...e, file: catalogs[0].file });
   }
 
   // declared compatibility

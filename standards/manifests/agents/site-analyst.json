@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "site-analyst",
+  "version": "1.0.0",
+  "name": "site-analyst",
+  "description": "Read-only UX and frontend auditor for live website behavior, responsiveness and accessibility.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "site-analyst.md",
+  "function": "advisor",
+  "read_only": true,
+  "activation": [
+    "A running website or UI must be audited for UX, responsive layout or accessibility",
+    "Findings must be grounded in observed behavior rather than source code alone"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 0
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Glob",
+      "Grep"
+    ],
+    "permission_mode": "plan",
+    "production_access": "none"
+  }
+}
