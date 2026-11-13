@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/mcp-catalog.schema.json",
+  "title": "mcp-catalog (declaration only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "id",
+    "entries"
+  ],
+  "properties": {
+    "kind": {
+      "const": "mcp-catalog"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "const": "portable-mcp-catalog"
+    },
+    "entries": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "classification",
+          "auto_enable"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "classification": {
+            "enum": [
+              "OPTIONAL",
+              "QUARANTINED"
+            ]
+          },
+          "auto_enable": {
+            "const": false
+          },
+          "manifest_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "inventory": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "presence",
+              "source",
+              "provenance",
+              "origin",
+              "version",
+              "transport",
+              "risk",
+              "permissions",
+              "required_env_vars",
+              "env_requirements",
+              "dependencies",
+              "reason"
+            ],
+            "properties": {
+              "presence": {
+                "enum": [
+                  "observed",
+                  "not-observed"
+                ]
+              },
+              "source": {
+                "enum": [
+                  "claude-user-mcp",
+                  "checked-user-config-files"
+                ]
+              },
+              "provenance": {
+                "const": "local-observation-2026-11-13"
+              },
+              "origin": {
+                "const": "unverified"
+              },
+              "version": {
+                "const": "unverified"
+              },
+              "transport": {
+                "enum": [
+                  "stdio",
+                  "remote-unverified",
+                  "unknown"
+                ]
+              },
+              "risk": {
+                "enum": [
+                  "high",
+                  "unknown"
+                ]
+              },
+              "permissions": {
+                "const": []
+              },
+              "required_env_vars": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]*$"
+                }
+              },
+              "env_requirements": {
+                "const": "unverified-observed-names-only"
+              },
+              "dependencies": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "classification": {
+                  "const": "OPTIONAL"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "manifest_id"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "classification": {
+                  "const": "QUARANTINED"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "inventory"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

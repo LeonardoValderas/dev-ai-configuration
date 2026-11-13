@@ -1,0 +1,29 @@
+{
+  "kind": "mcp-template",
+  "schema_version": "1.0",
+  "catalog_id": "portable-mcp-catalog",
+  "manifest_id": "context7",
+  "policy_ref": "context7#/portable/policy",
+  "status": "untested",
+  "executable": false,
+  "auto_enable": false,
+  "integration": "future-installer-only",
+  "bindings": {
+    "remote_url": "context7#/url",
+    "stdio_package": "context7#/portable/package",
+    "optional_env_names": "context7#/portable/optional_env_vars"
+  },
+  "stdio_fields": [
+    "command",
+    "args",
+    "env"
+  ],
+  "provider": "codex-config",
+  "format": "toml",
+  "server_container": "mcp_servers",
+  "remote_type": "implicit-url",
+  "target_file": "config.toml",
+  "remote_fields": [
+    "url"
+  ]
+}

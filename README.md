@@ -77,7 +77,7 @@ See [docs/security-principles.md](docs/security-principles.md).
 See [docs/manifest-format.md](docs/manifest-format.md) and
 [docs/adding-components.md](docs/adding-components.md).
 
-## Current status: Phase 2E
+## Current status: Phase 2F
 
 _This section is the single canonical phase-state reference; other documents link here._
 
@@ -111,6 +111,12 @@ may be older than current upstream `main`. The following are **not yet
 included** and are planned for later phases:
 
 - Spec Kit installation and execution (only the declarative manifest exists).
-- Context7 integration.
-- MCP (Model Context Protocol) server configuration.
+- Context7 installation and runtime connection (declaration and validation are delivered).
+- Executable MCP (Model Context Protocol) client/server configuration (declarations,
+  policy validation and non-executable provider templates are delivered).
 - Adapter content and installer logic beyond validation.
+
+Phase 2F adds an optional, disabled Context7 declaration and a sanitized,
+quarantined MCP reference inventory. See the [portable MCP catalog, policy,
+compatibility and adoption guide](docs/mcp-catalog.md). Provider templates are
+non-executable specifications for future installer work; no servers are enabled.

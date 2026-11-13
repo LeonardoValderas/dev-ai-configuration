@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/mcp-template.schema.json",
+  "title": "mcp-template (declaration only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "provider",
+    "catalog_id",
+    "manifest_id",
+    "policy_ref",
+    "status",
+    "executable",
+    "auto_enable",
+    "integration",
+    "format",
+    "server_container",
+    "remote_type",
+    "target_file",
+    "bindings",
+    "stdio_fields",
+    "remote_fields"
+  ],
+  "properties": {
+    "kind": {
+      "const": "mcp-template"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "provider": {
+      "enum": [
+        "claude-code",
+        "codex-config",
+        "codex-plugin",
+        "cursor"
+      ]
+    },
+    "catalog_id": {
+      "const": "portable-mcp-catalog"
+    },
+    "manifest_id": {
+      "const": "context7"
+    },
+    "policy_ref": {
+      "const": "context7#/portable/policy"
+    },
+    "status": {
+      "const": "untested"
+    },
+    "executable": {
+      "const": false
+    },
+    "auto_enable": {
+      "const": false
+    },
+    "integration": {
+      "const": "future-installer-only"
+    },
+    "format": {
+      "enum": [
+        "json",
+        "toml"
+      ]
+    },
+    "server_container": {
+      "enum": [
+        "mcpServers",
+        "mcp_servers"
+      ]
+    },
+    "remote_type": {
+      "enum": [
+        "http",
+        "implicit-url",
+        "streamable-http"
+      ]
+    },
+    "target_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bindings": {
+      "const": {
+        "remote_url": "context7#/url",
+        "stdio_package": "context7#/portable/package",
+        "optional_env_names": "context7#/portable/optional_env_vars"
+      }
+    },
+    "stdio_fields": {
+      "const": [
+        "command",
+        "args",
+        "env"
+      ]
+    },
+    "remote_fields": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "claude-code"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "format": {
+            "const": "json"
+          },
+          "server_container": {
+            "const": "mcpServers"
+          },
+          "remote_type": {
+            "const": "http"
+          },
+          "target_file": {
+            "const": ".mcp.json"
+          },
+          "remote_fields": {
+            "const": [
+              "type",
+              "url"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "codex-config"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "format": {
+            "const": "toml"
+          },
+          "server_container": {
+            "const": "mcp_servers"
+          },
+          "remote_type": {
+            "const": "implicit-url"
+          },
+          "target_file": {
+            "const": "config.toml"
+          },
+          "remote_fields": {
+            "const": [
+              "url"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "codex-plugin"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "format": {
+            "const": "json"
+          },
+          "server_container": {
+            "const": "mcpServers"
+          },
+          "remote_type": {
+            "const": "streamable-http"
+          },
+          "target_file": {
+            "const": "mcp.json"
+          },
+          "remote_fields": {
+            "const": [
+              "type",
+              "url"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "cursor"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "format": {
+            "const": "json"
+          },
+          "server_container": {
+            "const": "mcpServers"
+          },
+          "remote_type": {
+            "const": "implicit-url"
+          },
+          "target_file": {
+            "const": ".cursor/mcp.json"
+          },
+          "remote_fields": {
+            "const": [
+              "url"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

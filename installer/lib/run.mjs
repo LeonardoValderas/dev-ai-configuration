@@ -7,6 +7,7 @@ import { confine } from './confine.mjs';
 import { checkAgentPolicy, checkCatalog, checkRuntimeCoupling, checkInstructionsCoupling } from './agents.mjs';
 import { checkSkillPolicy, checkSkillCatalog, checkSkillCoupling, checkSkillContent, relativeLinks, isExternal } from './skills.mjs';
 import { checkWorkflow, checkAgentMap, checkIntegration, checkProject } from './sdd.mjs';
+import { checkMcp, checkMcpSet } from './mcp.mjs';
 import { checkDangerous, checkPaths, checkSecrets, checkResult } from './checks.mjs';
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -20,6 +21,8 @@ const KIND_SCHEMA = {
   skill: 'skill-manifest.schema.json',
   'skill-catalog': 'skill-catalog.schema.json',
   mcp: 'mcp-manifest.schema.json',
+  'mcp-catalog': 'mcp-catalog.schema.json',
+  'mcp-template': 'mcp-template.schema.json',
   adapter: 'adapter-manifest.schema.json',
   'technology-profile': 'technology-profile-manifest.schema.json',
   'compatibility-matrix': 'compatibility-matrix.schema.json',
@@ -111,6 +114,7 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
     tag(checkPaths(doc));
     tag(checkSecrets(doc));
     if (doc.kind !== 'compatibility-matrix') tag(checkDangerous(doc));
+    if (['mcp', 'mcp-catalog', 'mcp-template'].includes(doc.kind) && schemaErrors.length === 0) tag(checkMcp(doc));
     if (doc.kind === 'result') tag(checkResult(doc));
     if (['agent', 'agent-catalog', 'skill', 'skill-catalog'].includes(doc.kind)) tag(checkRuntimeCoupling(doc));
     if (doc.kind === 'skill' || doc.kind === 'skill-catalog') tag(checkSkillCoupling(doc));
@@ -130,6 +134,8 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
       valid.push({ file, doc });
     }
   }
+
+  errors.push(...checkMcpSet(docs.filter(({ file, doc }) => doc && KIND_SCHEMA[doc.kind] && !schemaFailed.has(file))));
 
   // duplicates and references across the document set
   const ids = new Map(); // kind -> Map(id -> file)
