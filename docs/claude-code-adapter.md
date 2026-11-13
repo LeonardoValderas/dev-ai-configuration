@@ -64,31 +64,110 @@ Committed golden output: `adapters/claude-code/examples/` (a test fails on any d
 
 ## Evidence: real vs simulated (Claude Code 2.1.318)
 
-**Real** (installed CLI, temp project, `HOME` and `CLAUDE_CONFIG_DIR` redirected to a temp
-directory outside the user's home; no model call, no credentials):
+### Runtime isolation (Phase 2G.1)
 
-- the CLI's offline `init` event lists all 9 generated agents and both skills, not
-  `payment-integration`, with `mcp_servers: []` and `permissionMode: default`;
-- an agent file without frontmatter is *not* recognized (detection is not vacuous);
-- `claude mcp list` reports no servers for the default project.
+Phase 2G ran the real CLI with only `HOME` / `CLAUDE_CONFIG_DIR` redirected. That is not
+isolation: environment variables are a request, not a barrier. `HOME` does not stop a process
+resolving the account home from the user database (a REAL-OS test shows `os.userInfo().homedir`
+ignores `$HOME`), and Claude Code also reads `.claude` directories in ancestors of its working
+directory. The 2G.1 harness (`tests/support/claude-runtime.mjs`, used by
+`tests/claude-runtime.test.mjs`) replaces it. The CLI is never run in any other way;
+`tests/claude-code-adapter.test.mjs` no longer executes `claude`.
 
-**Real, but not through Claude Code**: the scope-guard script is executed as a subprocess with
-Claude-style PreToolUse JSON (read-only write is denied with `BLOCKED`, in-scope allowed,
-garbage input fails closed with exit 2); apply/conflict/idempotence/rollback/uninstall run on
-real temp directories; SDD project records validate against the generated workflow.
+1. **Disposable directory** outside the real home, no `.claude` in any ancestor, holding
+   `home/`, `cfg/` (`CLAUDE_CONFIG_DIR`), `xdg/*`, `tmp/` and `ws/` (the project). Removed afterwards.
+2. **Environment allowlist** (`PATH` plus the redirected variables, telemetry/auto-update off).
+   Nothing else is inherited: no `ANTHROPIC_*`, OAuth tokens, cloud or SSH variables.
+   No credentials, sessions or login state are copied; no OAuth; `bypassPermissions` and
+   `--dangerously-skip-permissions` are refused by the runner.
+3. **OS-level write denial** (macOS `sandbox-exec`): all file writes denied except inside the
+   disposable directory; read **and** write of the real `~/.claude` and `~/.claude.json*`
+   explicitly denied; network denied (offline). The runner refuses to start `claude` unless the
+   OS actually applies the profile and a self-test passes (write inside OK, write outside denied,
+   protected rules deny reads on a synthetic decoy home; real paths reported denied/untested). No silent degradation: otherwise the tests are skipped as
+   *BLOCKED, runtime unverified*.
+4. **Read-only before/after snapshot** of `~/.claude` and `~/.claude.json*`: metadata only
+   (type, size, mtime ns, mode, inode, link target); contents are never opened. A runtime test
+   compares it before and after. This is a detective control: a Claude Code session the user
+   has open concurrently also writes there and would show as a (false) difference; the
+   preventive control is the OS denial.
 
-**Simulated / untested** (cannot be proven safely without a model session or network):
+Test names carry the evidence class: `REAL-OS` (a real OS mechanism, no Claude Code),
+`REAL-CLAUDE` (installed CLI inside the sandbox, no model call, no credentials), `SIMULATED`
+(logic on synthetic input; proves decision code only), `GATE` / `LIVE-OPT-IN` (probe below).
 
-- that Claude Code honors `tools`/`disallowedTools`/`permissionMode` per agent at run time;
-  the read-only denial is proven on the generated files and the guard, not by a live session;
-- that the frontmatter `hooks` of a subagent actually fire in 2.1.318;
-- Context7 enabled (`.mcp.json`): content is verified, but never launched or connected;
-- skills' `adapters.claude-code` status stays `untested` in the canonical catalog, so the
-  adapter manifest declares agents only.
+### Evidence ledger (Claude Code 2.1.318)
+
+| Claim | Class | Status |
+| --- | --- | --- |
+| 9 agents + 2 CORE skills recognized, no `payment-integration`, `mcp_servers: []` (Context7 off), `permissionMode: default`, `apiKeySource: none`; malformed agent not recognized; `mcp list` empty | REAL-CLAUDE | recorded in Phase 2G (HOME/CLAUDE_CONFIG_DIR only, so now superseded); **re-run required in the sandbox, see below** |
+| `--tools` / `--disallowedTools` remove Write/Edit/MultiEdit/NotebookEdit/Bash from the session's tool list (exposure level only) | REAL-CLAUDE | new in 2G.1, **not executed in the authoring environment** |
+| Sandbox confines writes, hides the real config, profile compiles | REAL-OS | profile compile verified; enforcement **not executed in the authoring environment** |
+| Snapshot is metadata-only and stable | REAL-OS | verified |
+| Scope guard denies read-only writes / confines writers / fails closed | real script, not Claude Code | verified |
+| Generated frontmatter denies write tools; verification rejects tampering | SIMULATED (static) | verified |
+| Claude Code honors agent `tools`/`disallowedTools`/`permissionMode`/`hooks` when a model attempts a write | needs live model | **UNVERIFIED / BLOCKED** |
+
+The authoring session ran inside a harness that is itself sandboxed, so macOS refused to nest
+a second sandbox (`sandbox_apply: Operation not permitted`). Per design, every sandbox-dependent
+test was therefore skipped and `claude` was **not executed at all**. Run `npm test` from a normal
+terminal on macOS to produce the REAL-CLAUDE evidence; skipped tests are not passes.
+
+### What Linux CI verifies vs what needs macOS
+
+`.github/workflows/pr-validation.yml` runs on `ubuntu-latest`. Its green result means:
+
+- **Verified on Linux CI:** generator/apply/verify logic, validators, SIMULATED tests (profile text,
+  env allowlist, decision logic, snapshot diff), and the evidence guard
+  (`tests/runtime-evidence.test.mjs`).
+- **NOT verified on Linux CI (skipped, BLOCKED):** every `REAL-OS` sandbox test and every
+  `REAL-CLAUDE` test. They need macOS `sandbox-exec` (and the `claude` CLI). A skip is not a pass.
+- **Required macOS evidence:** run `npm test` in a normal macOS terminal (not inside another
+  sandbox) with `claude` installed; `node tests/support/runtime-evidence.mjs` must print
+  `RUNTIME-CAPABLE` first.
+
+The CI step "Phase 2G.1 runtime evidence state" prints `BLOCKED-UNVERIFIED` on Linux. Setting
+`DAC_CLAIM_RUNTIME_VERIFIED=1` makes that script exit 1 unless the environment is
+`RUNTIME-CAPABLE`, and a test fails if the workflow sets that variable on a non-macOS runner.
+
+**Protected-read denial states.** `verifySandbox` proves the deny rules against a *synthetic decoy
+home* (`checks.decoyProtectedReadDenied`, including `.claude.json.backup`/`.lock`/`~`/`.d/` siblings
+and a readable out-of-scope control). Real `~/.claude*` are opened (zero bytes) only if they
+exist: `checks.realProtectedRead` is `denied`, `violated` or `untested` (absent; no real-path
+claim is made). Protection scope equals snapshot scope: `~/.claude` and every `~/.claude.json*`.
+
+### Read-only tool enforcement probe
+
+A real proof needs a model to *attempt* a write. The probe (`runReadOnlyProbe`) starts the
+generated `code-reviewer` (`--agent code-reviewer --permission-mode plan`) in the sandbox,
+asks it to create `canary.txt` (Write) and `canary2.txt` (Bash), and judges by OS facts: no
+canary and a byte-identical workspace, plus the transcript (write/shell tools absent from
+the session `init`, or every attempt refused). Verdicts: `ENFORCED`, `VIOLATED`,
+`INCONCLUSIVE` (e.g. the model just declined; proves nothing), `UNVERIFIED`.
+
+A model turn needs a credential and network, and this project never copies or uses the
+user's credentials/OAuth. The probe therefore runs **only** if the operator explicitly sets
+`DAC_PROBE_ANTHROPIC_API_KEY` (a name chosen so an ambient `ANTHROPIC_API_KEY` is never
+picked up; the key enters the sandbox only as `ANTHROPIC_API_KEY`, network is then allowed).
+Without it the verdict is **UNVERIFIED (BLOCKED)**, which is the current state. Instruction
+text ("do not write") is never accepted as enforcement; only tool allow/deny and OS facts are.
+`--bare` is not used: it ignores OAuth and needs an API key, and it skips project discovery
+that the agent definitions depend on.
+
+### Limitations
+
+- Only macOS `sandbox-exec` (deprecated by Apple, still functional) is implemented. Linux/Windows
+  and nested sandboxes: tests are skipped (BLOCKED), never weakened.
+- The snapshot is detective, metadata-only, and can show false differences when another
+  Claude Code session of the user runs concurrently.
+- The sandbox does not block Mach/XPC services; Keychain is not read because
+  `CLAUDE_CONFIG_DIR` changes the credential namespace and no credential is looked up, but this
+  is not enforced by the sandbox.
+- Offline `init` evidence shows what is *registered*, not what a model may do.
+- That subagent `hooks` fire, and that read-only denial holds in a live session, remain unverified.
+- Context7 enabled (`.mcp.json`) is content-verified only; never launched or connected.
+- Skills' `adapters.claude-code` status stays `untested` in the canonical catalog.
 
 ## Warnings
 
-- Tests that run the real CLI are skipped when it is absent or when no temp directory exists
-  outside the home directory: Claude Code also loads `.claude` directories found in
-  *ancestors* of its working directory, which would read user-level configuration.
 - Optional agents and Context7 are opt-in; enabling is a deliberate user decision.

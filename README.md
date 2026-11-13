@@ -120,7 +120,9 @@ Phase 2G adds the portable Claude Code project adapter (`adapters/claude-code/`)
 it generates and safely applies project-scoped agents, the two CORE skills, SDD
 and contract rules, and a disabled-by-default Context7 setting. See
 [docs/claude-code-adapter.md](docs/claude-code-adapter.md) for usage and the
-separation of real versus simulated evidence.
+separation of real versus simulated evidence. Phase 2G.1 runs the real CLI only in a
+disposable, OS-sandboxed runtime (`CLAUDE_CONFIG_DIR` plus OS write denial, never the
+user's `~/.claude`); live read-only tool enforcement remains UNVERIFIED (see the doc).
 
 Phase 2F adds an optional, disabled Context7 declaration and a sanitized,
 quarantined MCP reference inventory. See the [portable MCP catalog, policy,

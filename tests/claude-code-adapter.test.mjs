@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync, readdirSync, lstatSync, readlinkSync, symlinkSync, statSync, cpSync, realpathSync, existsSync } from 'node:fs';
-import { tmpdir, userInfo } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join, relative, sep, isAbsolute, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -519,71 +519,6 @@ test('committed example projects equal freshly generated output (no drift, no ex
   assert.deepEqual([...c7].filter(([, v]) => v !== 'dir').map(([k]) => k).sort(), ['.claude/settings.json', '.mcp.json']);
 });
 
-// ------------------------------------------------ REAL Claude Code CLI evidence
-// Runs the installed CLI against a temp project with HOME and CLAUDE_CONFIG_DIR redirected into
-// a controlled temp directory, never ~/.claude. No model is invoked (no credentials exist: the CLI
-// emits its offline init event and stops with "Not logged in"). Skipped when the CLI is absent.
-const probe = spawnSync('claude', ['--version'], { encoding: 'utf8', cwd: '/', env: { PATH: process.env.PATH, HOME: '/nonexistent-dac-home', NO_COLOR: '1' } });
-// Claude Code also discovers `.claude` directories in ANCESTORS of its working directory. The real
-// tests therefore only run under a temp base that is outside the user's home directory, so that
-// no user-level configuration can be read; otherwise they are skipped (never weakened).
-function isolatedBase() {
-  let userHome;
-  try { userHome = realpathSync(userInfo().homedir); } catch { return null; }
-  for (const c of [tmpdir(), '/tmp', '/var/tmp']) {
-    let b;
-    try { b = realpathSync(c); } catch { continue; }
-    const r = relative(userHome, b);
-    const insideHome = r === '' || (!r.startsWith('..') && !isAbsolute(r));
-    if (insideHome) continue;
-    let clean = true;
-    for (let d = b; d !== dirname(d); d = dirname(d)) if (existsSync(join(d, '.claude')) || existsSync(join(d, '.claude.json'))) clean = false;
-    if (clean) return b;
-  }
-  return null;
-}
-const REAL_BASE = isolatedBase();
-const HAVE_CLAUDE = probe.status === 0 && /Claude Code/.test(probe.stdout) && REAL_BASE !== null;
-const skipReason = () => (REAL_BASE === null ? 'no temp base outside the home directory' : 'claude CLI not installed');
-function realTmp(fn) {
-  const dir = realpathSync(mkdtempSync(join(REAL_BASE, 'dac-cc-real-')));
-  for (const d of ['home', 'cfg', 'ws']) mkdirSync(join(dir, d));
-  try { return fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
-}
-function initEvent(ws, dir) {
-  const env = { PATH: process.env.PATH, HOME: join(dir, 'home'), CLAUDE_CONFIG_DIR: join(dir, 'cfg'), TMPDIR: dir, NO_COLOR: '1' };
-  const r = spawnSync('claude', ['-p', 'detect', '--output-format', 'stream-json', '--verbose', '--max-turns', '1', '--setting-sources', 'project'], { cwd: ws, env, encoding: 'utf8', timeout: 90000, input: '' });
-  for (const line of (r.stdout || '').split('\n')) {
-    try { const j = JSON.parse(line); if (j.type === 'system' && j.subtype === 'init') return { init: j, result: r }; } catch { /* not json */ }
-  }
-  return { init: null, result: r };
-}
-const real = (name, fn) => test(`REAL claude CLI: ${name}`, { skip: !HAVE_CLAUDE && skipReason() }, fn);
-real('recognizes the 9 generated agents and 2 skills, no optional agent, no MCP server', () => realTmp((dir) => {
-  const ws = join(dir, 'ws');
-  assert.equal(apply(ws, generate()).status, 'APPLIED');
-  const { init } = initEvent(ws, dir);
-  assert.ok(init, 'init event not emitted');
-  for (const id of NINE) assert.ok(init.agents.includes(id), `agent ${id} not recognized`);
-  assert.ok(!init.agents.includes('payment-integration'), JSON.stringify(init.agents));
-  for (const id of CORE_SKILLS) assert.ok(init.skills.includes(id), `skill ${id} not recognized`);
-  assert.deepEqual(init.mcp_servers, [], 'Context7 must not be active by default');
-  assert.equal(init.permissionMode, 'default');
-  assert.equal(init.apiKeySource, 'none');
-}));
-real('detection is real: a malformed agent file is not recognized', () => realTmp((dir) => {
-  const ws = join(dir, 'ws');
-  apply(ws, generate());
-  writeFileSync(join(ws, '.claude/agents/code-reviewer.md'), 'no frontmatter at all\n');
-  const { init } = initEvent(ws, dir);
-  assert.ok(init);
-  assert.ok(!init.agents.includes('code-reviewer'));
-  assert.ok(init.agents.includes('repo-analyst'));
-}));
-real('mcp list reports no servers for the default project', () => realTmp((dir) => {
-  const ws = join(dir, 'ws');
-  apply(ws, generate());
-  const r = spawnSync('claude', ['mcp', 'list'], { cwd: ws, env: { PATH: process.env.PATH, HOME: join(dir, 'home'), CLAUDE_CONFIG_DIR: join(dir, 'cfg'), TMPDIR: dir, NO_COLOR: '1' }, encoding: 'utf8', timeout: 60000, input: '' });
-  assert.equal(r.status, 0);
-  assert.match(r.stdout, /No MCP servers configured/);
-}));
+// Real Claude Code CLI evidence lives in tests/claude-runtime.test.mjs (Phase 2G.1). The CLI is run
+// only inside the disposable, OS-isolated runtime (CLAUDE_CONFIG_DIR + OS-level write denial);
+// this file never executes `claude`.

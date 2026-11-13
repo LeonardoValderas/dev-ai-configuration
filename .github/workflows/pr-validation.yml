@@ -29,3 +29,8 @@ jobs:
         run: npm test
       - name: Validate
         run: npm run validate
+      # This job runs on Linux. The Phase 2G.1 REAL-OS/REAL-CLAUDE sandbox tests need macOS
+      # sandbox-exec and are SKIPPED here, so a green run is NOT macOS runtime verification.
+      # This step prints that state explicitly; see docs/claude-code-adapter.md.
+      - name: Phase 2G.1 runtime evidence state (Linux CI is not macOS runtime verification)
+        run: node tests/support/runtime-evidence.mjs
