@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "technical-planner",
+  "version": "1.0.0",
+  "name": "technical-planner",
+  "description": "Read-only planner converting analysis and requirements into executable implementation plans.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "technical-planner.md",
+  "function": "advisor",
+  "read_only": true,
+  "activation": [
+    "A feature or change needs an implementation plan, acceptance criteria or task breakdown",
+    "A verified repository analysis exists and must be turned into an actionable plan"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 0
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Glob",
+      "Grep"
+    ],
+    "permission_mode": "plan",
+    "production_access": "none"
+  }
+}

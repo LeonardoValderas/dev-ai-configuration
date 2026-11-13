@@ -30,6 +30,7 @@ manifests list environment variable *names* only.
 - **agent**: `permissions` (required), `instructions_path`, `skills[]`, `mcp_servers[]`, `technology_profiles[]`.
 - **skill**: `instructions_path` (required), `requires_mcp[]`, `permissions`.
 - **mcp**: `transport` (`stdio`|`http`), `access` (`read-only`|`read-write`|`admin`), `command`+`args` (stdio, command required) or `url` (http, `https://` and no embedded userinfo, required), `env_vars[]` (names, `UPPER_SNAKE`).
+  Optional portable fields (`function`, `read_only`, `independent_of`, `activation`, `contracts`, `limits`; required for agents listed in the catalog) and the `agent-catalog` kind (12 agents: 8 primary, 2 optional, 2 redundant with `superseded_by`) are described in [agent-catalog.md](agent-catalog.md).
 - **adapter**: `target_tool` (must be in the matrix), `tool_versions {min,max}`, `output_dir`, `supports {agents,skills,mcp_servers,technology_profiles}` (ids).
 - **technology-profile**: `languages[]`, `validation_commands[]`, `skills[]`, `mcp_servers[]`.
 

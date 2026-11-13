@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "kmp-expert",
+  "version": "1.0.0",
+  "name": "kmp-expert",
+  "description": "Implements Kotlin Multiplatform changes while preserving Android and iOS behavior.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "kmp-expert.md",
+  "function": "implementer",
+  "read_only": false,
+  "activation": [
+    "The task touches Kotlin Multiplatform shared code, Compose Multiplatform, or Android/iOS platform code",
+    "A task contract names KMP module paths in allowed_paths"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 25
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write"
+    ],
+    "shell_commands": [
+      "git diff",
+      "git status"
+    ],
+    "writable_paths": [
+      "shared/**",
+      "composeApp/**",
+      "androidApp/**",
+      "iosApp/**",
+      "tests/**"
+    ],
+    "permission_mode": "default",
+    "production_access": "none"
+  }
+}

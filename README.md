@@ -81,11 +81,14 @@ See [docs/manifest-format.md](docs/manifest-format.md) and
 
 _This section is the single canonical phase-state reference; other documents link here._
 
-Phase 2A scaffold plus the shared contracts, schemas and validators above.
-`standards/manifests/` is intentionally empty: the following are **not yet
-included** and are planned for later phases:
+Phase 2A scaffold plus the shared contracts, schemas and validators above, and
+(Phase 2C) the portable catalog of the 12 original agents (10 manifests:
+8 primary, 2 optional; 2 redundant entries without manifest) under
+`standards/manifests/agents/`, see [docs/agent-catalog.md](docs/agent-catalog.md),
+and PR validation CI. The following are **not yet included** and are
+planned for later phases:
 
-- Agents, skills, or any agent/skill definitions.
+- Skill definitions.
 - Spec Kit integration.
 - Context7 integration.
 - MCP (Model Context Protocol) server configuration.

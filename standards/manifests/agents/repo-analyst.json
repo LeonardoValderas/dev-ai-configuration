@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "repo-analyst",
+  "version": "1.0.0",
+  "name": "repo-analyst",
+  "description": "Read-only repository analyst producing evidence-based technical reports.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "repo-analyst.md",
+  "function": "advisor",
+  "read_only": true,
+  "activation": [
+    "The task requires understanding an existing codebase, its architecture, dependencies, data flows or technical debt",
+    "A plan or implementation needs a verified repository analysis first"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 0
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Glob",
+      "Grep"
+    ],
+    "permission_mode": "plan",
+    "production_access": "none"
+  }
+}

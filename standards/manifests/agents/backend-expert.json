@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "kind": "agent",
+  "id": "backend-expert",
+  "version": "1.0.0",
+  "name": "backend-expert",
+  "description": "Implements secure server-side, API, data-access and integration changes within the task contract.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "instructions_path": "backend-expert.md",
+  "function": "implementer",
+  "read_only": false,
+  "activation": [
+    "The task touches server code, APIs, data access, authentication or integrations",
+    "A task contract names backend paths in allowed_paths"
+  ],
+  "contracts": {
+    "task": "task-contract",
+    "result": "result"
+  },
+  "limits": {
+    "max_files_changed": 25
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write"
+    ],
+    "shell_commands": [
+      "git diff",
+      "git status",
+      "npm test",
+      "npm run validate"
+    ],
+    "writable_paths": [
+      "src/**",
+      "tests/**"
+    ],
+    "permission_mode": "default",
+    "production_access": "none"
+  }
+}
