@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/skill-catalog.schema.json",
+  "title": "Portable skill catalog (inventory, classification and review of the original skills)",
+  "type": "object",
+  "required": ["kind", "schema_version", "version", "description", "expected", "skills"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "skill-catalog" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "expected": {
+      "type": "object",
+      "required": ["total", "core", "optional", "quarantined", "deprecated"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 1 },
+        "core": { "type": "integer", "minimum": 0 },
+        "optional": { "type": "integer", "minimum": 0 },
+        "quarantined": { "type": "integer", "minimum": 0 },
+        "deprecated": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "classification", "origin", "license", "dependencies", "minimum_permissions", "risks", "conflicts", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "classification": { "enum": ["CORE", "OPTIONAL", "QUARANTINED", "DEPRECATED"] },
+          "origin": {
+            "type": "object",
+            "required": ["path", "sha256", "files"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string", "pattern": "^claude/global/skills/[a-z0-9-]+/SKILL\\.md$" },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "files": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "license": {
+            "type": "object",
+            "required": ["status", "evidence"],
+            "additionalProperties": false,
+            "properties": {
+              "status": { "enum": ["verified-license-file", "verified-upstream", "declared-spdx", "declared-source-only", "none"] },
+              "spdx": { "$ref": "common.schema.json#/$defs/text" },
+              "evidence": { "$ref": "common.schema.json#/$defs/text" },
+              "provenance": { "$ref": "common.schema.json#/$defs/upstreamProvenance" }
+            }
+          },
+          "dependencies": {
+            "type": "object",
+            "required": ["external_services", "requires_credentials"],
+            "additionalProperties": false,
+            "properties": {
+              "skills": { "$ref": "common.schema.json#/$defs/idList" },
+              "external_services": { "$ref": "common.schema.json#/$defs/textList" },
+              "runtime_tools": { "$ref": "common.schema.json#/$defs/textList" },
+              "requires_credentials": { "type": "boolean" }
+            }
+          },
+          "minimum_permissions": { "$ref": "common.schema.json#/$defs/text" },
+          "risks": { "$ref": "common.schema.json#/$defs/textList" },
+          "conflicts": { "$ref": "common.schema.json#/$defs/textList" },
+          "rationale": { "$ref": "common.schema.json#/$defs/text" },
+          "superseded_by": { "$ref": "common.schema.json#/$defs/id" }
+        }
+      }
+    }
+  }
+}

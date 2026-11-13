@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { assertSupportedSchema, validateSchema } from './schema.mjs';
 import { confine } from './confine.mjs';
 import { checkAgentPolicy, checkCatalog, checkRuntimeCoupling, checkInstructionsCoupling } from './agents.mjs';
+import { checkSkillPolicy, checkSkillCatalog, checkSkillCoupling, checkSkillContent, relativeLinks, isExternal } from './skills.mjs';
 import { checkDangerous, checkPaths, checkSecrets, checkResult } from './checks.mjs';
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -16,6 +17,7 @@ const KIND_SCHEMA = {
   agent: 'agent-manifest.schema.json',
   'agent-catalog': 'agent-catalog.schema.json',
   skill: 'skill-manifest.schema.json',
+  'skill-catalog': 'skill-catalog.schema.json',
   mcp: 'mcp-manifest.schema.json',
   adapter: 'adapter-manifest.schema.json',
   'technology-profile': 'technology-profile-manifest.schema.json',
@@ -88,6 +90,7 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
   // per-document checks
   const valid = [];
   const catalogs = [];
+  const skillCatalogs = [];
   const schemaFailed = new Set();
   for (const { file, doc } of docs) {
     const tag = (list) => list.forEach((e) => errors.push({ ...e, file }));
@@ -102,8 +105,10 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
     tag(checkSecrets(doc));
     if (doc.kind !== 'compatibility-matrix') tag(checkDangerous(doc));
     if (doc.kind === 'result') tag(checkResult(doc));
-    if (doc.kind === 'agent' || doc.kind === 'agent-catalog') tag(checkRuntimeCoupling(doc));
+    if (['agent', 'agent-catalog', 'skill', 'skill-catalog'].includes(doc.kind)) tag(checkRuntimeCoupling(doc));
+    if (doc.kind === 'skill' || doc.kind === 'skill-catalog') tag(checkSkillCoupling(doc));
     if (doc.kind === 'agent-catalog' && schemaErrors.length === 0) catalogs.push({ file, doc });
+    if (doc.kind === 'skill-catalog' && schemaErrors.length === 0) skillCatalogs.push({ file, doc });
     if (MANIFEST_KINDS.has(doc.kind) && typeof doc.id === 'string') {
       if (basename(file) !== `${doc.id}.json`) tag([{ code: 'FILE_STRUCTURE', rule: 'filename-mismatch', path: '$.id', message: `file name must be "${doc.id}.json"` }]);
       if (typeof doc.instructions_path === 'string' && !doc.instructions_path.startsWith('/') && !doc.instructions_path.split(/[\\/]/).includes('..')) {
@@ -112,6 +117,7 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
         try { ok = !confine(target, root) && lstatSync(target).isFile(); } catch { ok = false; }
         if (!ok) tag([{ code: 'MISSING_REFERENCE', rule: 'instructions-file', path: '$.instructions_path', message: `instructions file not found: ${doc.instructions_path}` }]);
         else if (doc.kind === 'agent') tag(checkInstructionsCoupling(readFileSync(target, 'utf8')));
+        else if (doc.kind === 'skill') tag(checkSkillContent(readFileSync(target, 'utf8'), '$.instructions_path'));
       }
       valid.push({ file, doc });
     }
@@ -147,6 +153,8 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
     for (const e of checkCatalog(catalogs[0].doc, new Map([...agentDocs].map(([id, v]) => [id, v.doc])))) errors.push({ ...e, file: catalogs[0].file });
   }
 
+  checkSkills({ valid, schemaFailed, skillCatalogs, root, errors });
+
   // declared compatibility
   const matrices = docs.filter(({ doc }) => doc?.kind === 'compatibility-matrix');
   if (matrices.length > 1) errors.push({ code: 'DUPLICATE_ID', file: matrices[1].file, path: '$', message: 'more than one compatibility matrix supplied' });
@@ -173,4 +181,81 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
     errors.push({ code: 'SCHEMA_CONSTRAINT', file: matrixPath, path: '$', message: 'compatibility matrix does not satisfy its schema' });
   }
   return { errors, filesChecked: files.length };
+}
+
+const isSafeRel = (p) => typeof p === 'string' && p !== '' && !p.startsWith('/') && !/^[A-Za-z]:|^[~\\]/.test(p) && !p.split(/[\\/]/).includes('..');
+function readIfFile(dir, rel, root) {
+  if (!isSafeRel(rel)) return null; // reported as ABSOLUTE_PATH / PATH_TRAVERSAL by checkPaths
+  const target = join(dir, rel);
+  try { return !confine(target, root) && lstatSync(target).isFile() ? { target, text: readFileSync(target, 'utf8') } : undefined; } catch { return undefined; }
+}
+function listFiles(dir) {
+  const out = [];
+  for (const n of readdirSync(dir).sort()) {
+    const p = join(dir, n);
+    const s = lstatSync(p);
+    if (s.isSymbolicLink()) continue; // rejected earlier by collectFiles
+    if (s.isDirectory()) out.push(...listFiles(p)); else out.push(p);
+  }
+  return out;
+}
+
+// Skill policy: strict rules for catalog-linked skills, catalog consistency,
+// referenced/notice file content, layout (no stray or quarantined bodies) and
+// cross-component rules (no unverified adapter claims, no auto-enabled external skills).
+function checkSkills({ valid, schemaFailed, skillCatalogs, root, errors }) {
+  const push = (file, list) => list.forEach((e) => errors.push({ file, ...e }));
+  if (skillCatalogs.length > 1) errors.push({ code: 'DUPLICATE_ID', file: skillCatalogs[1].file, path: '$', message: 'more than one skill catalog supplied' });
+  const catalog = skillCatalogs[0];
+  const skills = new Map();
+  for (const { file, doc } of valid) if (doc.kind === 'skill' && !schemaFailed.has(file)) skills.set(doc.id, { file, doc });
+  const approved = new Set(catalog?.doc.skills.filter((e) => e.classification === 'CORE' || e.classification === 'OPTIONAL').map((e) => e.id) ?? []);
+
+  for (const [id, { file, doc }] of skills) {
+    push(file, checkSkillPolicy(doc, { strict: approved.has(id) }));
+    const dir = dirname(file);
+    const refs = [...(doc.reference_paths ?? []).map((r, i) => [r, `$.reference_paths[${i}]`]), ...(doc.license ? [[doc.license.notice_path, '$.license.notice_path']] : []), ...(doc.license?.license_path ? [[doc.license.license_path, '$.license.license_path']] : [])];
+    for (const [rel, path] of refs) {
+      const r = readIfFile(dir, rel, root);
+      if (r === null) continue;
+      if (r === undefined) { push(file, [{ code: 'MISSING_REFERENCE', rule: 'reference-file', path, message: `referenced file not found: ${rel}` }]); continue; }
+      if (!rel.endsWith('.md')) push(file, [{ code: 'SKILL_POLICY', rule: 'reference-type', path, message: 'referenced files must be Markdown (.md)' }]);
+      push(file, checkSkillContent(r.text, path, { legal: rel.startsWith('licenses/') || path === '$.license.notice_path' || path === '$.license.license_path' }).map((e) => ({ ...e, message: `${rel}: ${e.message}` })));
+    }
+    // links and backticked repo paths in the instructions must resolve
+    const ins = readIfFile(dir, doc.instructions_path, root);
+    if (ins) {
+      const shipped = new Set([...(doc.reference_paths ?? []), doc.license?.notice_path, doc.license?.license_path]);
+      for (const link of relativeLinks(ins.text)) if (!readIfFile(dir, link, root)) push(file, [{ code: 'MISSING_REFERENCE', rule: 'instructions-link', path: '$.instructions_path', message: `instructions link not found: ${link}` }]);
+      for (const m of ins.text.matchAll(/`((?:references|licenses)\/[^`\s]+\.md)`/g)) {
+        if (!shipped.has(m[1])) push(file, [{ code: 'MISSING_REFERENCE', rule: 'instructions-link', path: '$.instructions_path', message: `instructions mention an unshipped file: ${m[1]}` }]);
+      }
+    }
+  }
+
+  if (catalog) {
+    push(catalog.file, checkSkillCatalog(catalog.doc, new Map([...skills].map(([id, v]) => [id, v.doc]))));
+    // layout: the catalog directory may only hold the catalog and files of approved skills
+    const dir = dirname(catalog.file);
+    const allowed = new Set([catalog.file]);
+    for (const [id, { file, doc }] of skills) {
+      if (!approved.has(id)) continue;
+      allowed.add(file);
+      for (const rel of [doc.instructions_path, doc.license?.notice_path, doc.license?.license_path, ...(doc.reference_paths ?? [])]) if (isSafeRel(rel)) allowed.add(join(dirname(file), rel));
+    }
+    for (const f of listFiles(dir)) {
+      if (basename(f) === '.gitkeep' || allowed.has(f)) continue;
+      errors.push({ code: 'SKILL_POLICY', rule: 'unexpected-skill-file', file: f, path: '$', message: 'file is not part of an approved skill; quarantined, deprecated and unknown skills must not ship instruction text' });
+    }
+    // cross-component rules
+    const entries = new Map(catalog.doc.skills.map((e) => [e.id, e]));
+    for (const { file, doc } of valid) {
+      const claims = doc.kind === 'adapter' ? doc.supports?.skills : (doc.kind === 'technology-profile' || doc.kind === 'agent') ? doc.skills : undefined;
+      for (const id of claims ?? []) {
+        if (!entries.has(id)) continue;
+        if (doc.kind === 'adapter') push(file, [{ code: 'SKILL_POLICY', rule: 'adapter-claim', path: '$.supports.skills', message: `adapter claims support for skill "${id}" without recorded adapter tests` }]);
+        else if (isExternal(skills.get(id)?.doc)) push(file, [{ code: 'SKILL_POLICY', rule: 'auto-enable-external', path: '$.skills', message: `external-service skill "${id}" must not be enabled by default from ${doc.kind} manifests` }]);
+      }
+    }
+  }
 }

@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "kind": "skill",
+  "version": "1.0.0",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "auto_enable": false,
+  "id": "frontend-design",
+  "name": "Frontend Design",
+  "description": "Build distinctive, accessible, production-grade frontend interfaces with strong design direction. Guidance only; edits stay within frontend paths.",
+  "instructions_path": "frontend-design.md",
+  "activation": [
+    "The task builds or styles web components, pages, dashboards or applications",
+    "Activate explicitly per task or profile; it is never enabled automatically"
+  ],
+  "risk": "low",
+  "license": {
+    "spdx": "Apache-2.0",
+    "evidence": "license-file",
+    "attribution": "Anthropic frontend-design skill (Apache License 2.0 text shipped with the source)",
+    "notice_path": "licenses/frontend-design-NOTICE.md"
+  },
+  "dependencies": {
+    "skills": [],
+    "external_services": [],
+    "runtime_tools": [],
+    "requires_credentials": false
+  },
+  "reference_paths": [
+    "licenses/frontend-design-Apache-2.0.md"
+  ],
+  "adapters": {
+    "claude-code": "untested",
+    "codex": "untested",
+    "cursor": "untested"
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write"
+    ],
+    "writable_paths": [
+      "src/**",
+      "public/**",
+      "tests/**"
+    ],
+    "permission_mode": "default",
+    "production_access": "none"
+  }
+}
