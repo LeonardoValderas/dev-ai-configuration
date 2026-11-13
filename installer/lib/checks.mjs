@@ -1,7 +1,7 @@
 // Semantic (non-schema) checks: dangerous permissions, absolute paths,
 // secrets, result consistency. Pure functions over parsed JSON; no I/O.
 
-export const PATH_KEYS = new Set(['allowed_paths', 'prohibited_paths', 'files_changed', 'writable_paths', 'instructions_path', 'output_dir']);
+export const PATH_KEYS = new Set(['allowed_paths', 'prohibited_paths', 'files_changed', 'writable_paths', 'instructions_path', 'output_dir', 'reference_paths', 'notice_path', 'license_path']);
 const COMMAND_KEYS = new Set(['tools', 'shell_commands', 'authorized_tools', 'validation_commands']);
 const BROAD_PATH_KEYS = new Set(['writable_paths', 'allowed_paths']);
 
@@ -32,7 +32,7 @@ function destructiveDelete(s) {
   return false;
 }
 
-const COMMAND_RULES = [
+export const COMMAND_RULES = [
   ['force-push', (s) => /\bgit\s+push\b[^;&|]*?(?:\s(?:--force|-[a-zA-Z]*f[a-zA-Z]*)(?=[\s:)"']|$)|\s\+\S)/.test(s)],
   ['bypass-permissions', (s) => /--dangerously-skip-permissions|bypassPermissions|--no-verify|--yolo/i.test(s)],
   ['destructive-delete', destructiveDelete],
@@ -66,7 +66,7 @@ export function checkDangerous(doc) {
 }
 
 // ---- absolute paths --------------------------------------------------------
-const ABS_ANYWHERE = new RegExp(
+export const ABS_ANYWHERE = new RegExp(
   '(?:^|[\\s"\'=(:,])(?:/(?:Users|home|root|etc|var|opt|usr|private|tmp|mnt|srv|Volumes|bin)(?:/|\\b)|[A-Za-z]:[\\\\/]|~/|\\\\\\\\[^\\\\\\s]+\\\\)|file://|\\$\\{?HOME\\}?');
 const ABS_START = /^(\/|~|[A-Za-z]:[\\/]|\\\\|\$\{?HOME\}?|file:\/\/)/;
 

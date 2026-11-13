@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "kind": "skill",
+  "version": "1.0.0",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "auto_enable": false,
+  "id": "supabase-postgres-best-practices",
+  "name": "Supabase Postgres Best Practices",
+  "description": "Postgres performance, schema, concurrency and Row Level Security guidance for writing and reviewing SQL, including Supabase projects. Guidance only; no database access.",
+  "instructions_path": "supabase-postgres-best-practices.md",
+  "activation": [
+    "The task writes, reviews or optimizes SQL queries, schemas, indexes or migrations",
+    "The task configures connection pooling or Row Level Security policies",
+    "Activate explicitly per task or profile; it is never enabled automatically"
+  ],
+  "risk": "low",
+  "license": {
+    "spdx": "MIT",
+    "evidence": "upstream-verified",
+    "attribution": "Supabase skill supabase-postgres-best-practices 1.0.0 (https://github.com/supabase/agent-skills at f421451c7956d9a79b8257ccc24a7ab6d16037e2), Copyright (c) 2026 Supabase, MIT",
+    "notice_path": "licenses/supabase-postgres-best-practices-NOTICE.md",
+    "license_path": "licenses/supabase-postgres-best-practices-MIT.md",
+    "provenance": {
+      "source_url": "https://github.com/supabase/agent-skills",
+      "source_commit": "f421451c7956d9a79b8257ccc24a7ab6d16037e2",
+      "source_path": "skills/supabase-postgres-best-practices",
+      "license_url": "https://github.com/supabase/agent-skills/blob/main/LICENSE",
+      "copyright": "Copyright (c) 2026 Supabase",
+      "license_scope": "Official MIT LICENSE at the upstream repository root (observed on main; the root file is not present at source_commit). The skill's own SKILL.md frontmatter at source_commit declares MIT. The carried snapshot corresponds to source_commit, not current main."
+    }
+  },
+  "dependencies": {
+    "skills": [],
+    "external_services": [],
+    "runtime_tools": [],
+    "requires_credentials": false
+  },
+  "reference_paths": [
+    "references/supabase-postgres-best-practices/advanced-full-text-search.md",
+    "references/supabase-postgres-best-practices/advanced-jsonb-indexing.md",
+    "references/supabase-postgres-best-practices/conn-idle-timeout.md",
+    "references/supabase-postgres-best-practices/conn-limits.md",
+    "references/supabase-postgres-best-practices/conn-pooling.md",
+    "references/supabase-postgres-best-practices/conn-prepared-statements.md",
+    "references/supabase-postgres-best-practices/data-batch-inserts.md",
+    "references/supabase-postgres-best-practices/data-n-plus-one.md",
+    "references/supabase-postgres-best-practices/data-pagination.md",
+    "references/supabase-postgres-best-practices/data-upsert.md",
+    "references/supabase-postgres-best-practices/lock-advisory.md",
+    "references/supabase-postgres-best-practices/lock-deadlock-prevention.md",
+    "references/supabase-postgres-best-practices/lock-short-transactions.md",
+    "references/supabase-postgres-best-practices/lock-skip-locked.md",
+    "references/supabase-postgres-best-practices/monitor-explain-analyze.md",
+    "references/supabase-postgres-best-practices/monitor-pg-stat-statements.md",
+    "references/supabase-postgres-best-practices/monitor-vacuum-analyze.md",
+    "references/supabase-postgres-best-practices/query-composite-indexes.md",
+    "references/supabase-postgres-best-practices/query-covering-indexes.md",
+    "references/supabase-postgres-best-practices/query-index-types.md",
+    "references/supabase-postgres-best-practices/query-missing-indexes.md",
+    "references/supabase-postgres-best-practices/query-partial-indexes.md",
+    "references/supabase-postgres-best-practices/schema-data-types.md",
+    "references/supabase-postgres-best-practices/schema-foreign-key-indexes.md",
+    "references/supabase-postgres-best-practices/schema-lowercase-identifiers.md",
+    "references/supabase-postgres-best-practices/schema-partitioning.md",
+    "references/supabase-postgres-best-practices/schema-primary-keys.md",
+    "references/supabase-postgres-best-practices/security-privileges.md",
+    "references/supabase-postgres-best-practices/security-rls-basics.md",
+    "references/supabase-postgres-best-practices/security-rls-performance.md"
+  ],
+  "adapters": {
+    "claude-code": "untested",
+    "codex": "untested",
+    "cursor": "untested"
+  },
+  "permissions": {
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "production_access": "none"
+  }
+}

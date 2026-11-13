@@ -37,6 +37,19 @@
       "type": "string",
       "minLength": 1
     },
+    "upstreamProvenance": {
+      "type": "object",
+      "required": ["source_url", "source_commit", "source_path", "license_url", "copyright", "license_scope"],
+      "additionalProperties": false,
+      "properties": {
+        "source_url": { "type": "string", "pattern": "^https://[^\\s]+$" },
+        "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "source_path": { "type": "string", "minLength": 1 },
+        "license_url": { "type": "string", "pattern": "^https://[^\\s]+$" },
+        "copyright": { "type": "string", "minLength": 1 },
+        "license_scope": { "type": "string", "minLength": 1 }
+      }
+    },
     "pathList": {
       "type": "array",
       "items": {

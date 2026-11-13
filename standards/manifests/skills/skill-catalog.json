@@ -1,0 +1,615 @@
+{
+  "schema_version": "1.0",
+  "kind": "skill-catalog",
+  "version": "1.0.0",
+  "description": "Inventory, classification and security review of the 21 original skills. CORE and OPTIONAL skills have a portable manifest; QUARANTINED and DEPRECATED skills are recorded as factual metadata only and none of their instruction text is copied. origin.sha256 is the digest of the original SKILL.md so the unmodified originals can be re-verified.",
+  "expected": {
+    "total": 21,
+    "core": 2,
+    "optional": 0,
+    "quarantined": 18,
+    "deprecated": 1
+  },
+  "skills": [
+    {
+      "id": "supabase-postgres-best-practices",
+      "classification": "CORE",
+      "origin": {
+        "path": "claude/global/skills/supabase-postgres-best-practices/SKILL.md",
+        "sha256": "7ecae0a1ba93a254e795212926c5e93ec4baba9c1809b6522561dd171b679176",
+        "files": 37
+      },
+      "license": {
+        "status": "verified-upstream",
+        "spdx": "MIT",
+        "evidence": "Recorded provenance (not re-checked at test time): official upstream https://github.com/supabase/agent-skills, source snapshot commit f421451c7956d9a79b8257ccc24a7ab6d16037e2, path skills/supabase-postgres-best-practices. The official repository root LICENSE (https://github.com/supabase/agent-skills/blob/main/LICENSE) is MIT, Copyright (c) 2026 Supabase; the skill frontmatter at that commit declares MIT. The full text is shipped in licenses/supabase-postgres-best-practices-MIT.md. Of the 37 files in the original skill, 30 rule files are carried over byte-for-byte (identical to the upstream commit); the other 7 (SKILL.md, AGENTS.md, README.md, metadata.json and the rule-authoring files _contributing.md, _template.md, _sections.md) are not carried over verbatim; SKILL.md is rewritten as portable instructions.",
+        "provenance": {
+          "source_url": "https://github.com/supabase/agent-skills",
+          "source_commit": "f421451c7956d9a79b8257ccc24a7ab6d16037e2",
+          "source_path": "skills/supabase-postgres-best-practices",
+          "license_url": "https://github.com/supabase/agent-skills/blob/main/LICENSE",
+          "copyright": "Copyright (c) 2026 Supabase",
+          "license_scope": "Official MIT LICENSE at the upstream repository root (observed on main; the root file is not present at source_commit). The skill's own SKILL.md frontmatter at source_commit declares MIT. The carried snapshot corresponds to source_commit, not current main."
+        }
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Read, Grep, Glob only. Guidance for writing and reviewing SQL; executing SQL is out of scope.",
+      "risks": [
+        "Applying guidance to a live database without review could cause lock contention or data loss; the portable instructions forbid executing SQL against production.",
+        "Source README references npm install and build steps for contributors; those are not part of the portable skill.",
+        "The carried snapshot corresponds to upstream commit f421451c..., not current main; upstream rules may have changed since."
+      ],
+      "conflicts": [
+        "Overlaps with the backend-expert agent data-access rules; complementary, not conflicting.",
+        "Source SKILL.md references a rule file that does not exist (schema-partial-indexes.md); the portable instructions point to the real query-partial-indexes.md."
+      ],
+      "rationale": "Priority domain (Supabase/PostgreSQL). Self-contained, no external service, no credentials, no commands. Approved with attribution and notice. The compiled AGENTS.md duplicate and contributor files are not carried over."
+    },
+    {
+      "id": "frontend-design",
+      "classification": "CORE",
+      "origin": {
+        "path": "claude/global/skills/frontend-design/SKILL.md",
+        "sha256": "b81e2ff87ed8fa4d6c377ccb127a7254c9e6a77e3ae94f21e6b514f7bb2945a0",
+        "files": 2
+      },
+      "license": {
+        "status": "verified-license-file",
+        "spdx": "Apache-2.0",
+        "evidence": "LICENSE.txt in the skill directory contains the full Apache License 2.0 text and SKILL.md frontmatter points to it. The snapshot does not name the copyright holder."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Read, Grep, Glob, Edit, Write limited to frontend source paths. No shell.",
+      "risks": [
+        "Strong aesthetic mandate may override an existing design system; the portable adaptation adds guardrails (respect existing design system, accessibility, no unreviewed external CDN assets).",
+        "Instruction text tells the model to avoid specific fonts and never converge on choices; treated as style guidance only."
+      ],
+      "conflicts": [
+        "Overlaps stylistically with the quarantined design-taste family and minimalist-ui; those are not shipped so no runtime conflict.",
+        "Defers to the frontend-expert agent for scope and file limits."
+      ],
+      "rationale": "Priority domain (frontend engineering). Only frontend skill with a verifiable redistributable license. Adapted with a modification notice as Apache-2.0 requires."
+    },
+    {
+      "id": "apify",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/apify/SKILL.md",
+        "sha256": "d42975ddf89dbf8b2522c38a70785ac3a6055976d9ef25e5dd39ed5ef520aaf0",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "Apify platform (cloud scrapers)"
+        ],
+        "runtime_tools": [
+          "apify-cli via npx"
+        ],
+        "requires_credentials": true
+      },
+      "minimum_permissions": "Would need shell access for a package runner and an Apify API token.",
+      "risks": [
+        "Requires an account token; the source shows a login command taking a token on the command line.",
+        "Runs a package at its latest version via a package runner (supply-chain risk).",
+        "Bulk scraping of social/marketplace sites carries terms-of-service and personal-data risk and may incur cost.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with firecrawl (the source itself compares them)."
+      ],
+      "rationale": "External service with credentials and unverifiable license. At most OPTIONAL by policy, and never auto-enabled; quarantined because the body cannot be redistributed."
+    },
+    {
+      "id": "brandkit",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/brandkit/SKILL.md",
+        "sha256": "b0c4837e1bd140ca816ae54948754ddd2ac1e2a4d3619363777a80caf00b2ede",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "image generation capability of the host tool"
+        ],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need an image-generation tool; no repository access required.",
+      "risks": [
+        "Depends on a host image-generation service whose credentials and cost are outside the skill.",
+        "Large persona-style directive prompt; not reviewed for redistribution.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with the imagegen-frontend-* and image-to-code skills."
+      ],
+      "rationale": "Brand/identity image generation is outside the Supabase and frontend-engineering priorities and the license is unverifiable."
+    },
+    {
+      "id": "design-taste-frontend-v1",
+      "classification": "DEPRECATED",
+      "origin": {
+        "path": "claude/global/skills/design-taste-frontend-v1/SKILL.md",
+        "sha256": "033d45af1ed23832730642f95f40ab49db7fb5222848489a6c5656144bfc6dae",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Read-only guidance plus code edits; nothing approved.",
+      "risks": [
+        "Its own description says it is the preserved v1 of design-taste-frontend.",
+        "No verifiable license; no body copied."
+      ],
+      "conflicts": [
+        "Superseded by design-taste-frontend, whose behavior it duplicates in part."
+      ],
+      "rationale": "Deprecated by its own description in favor of design-taste-frontend (itself quarantined). Not shipped.",
+      "superseded_by": "design-taste-frontend"
+    },
+    {
+      "id": "design-taste-frontend",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/design-taste-frontend/SKILL.md",
+        "sha256": "aa194351b246b8b4799099d4ed7b033d29eab6e6e3d58d8d2172978be7b3ec89",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need Read, Grep, Glob, Edit, Write on frontend paths.",
+      "risks": [
+        "Largest source skill (about 87 KB); very large prompt with many conditional rules inflates context.",
+        "Tells the agent to proceed without asking when it can infer intent; conflicts with confirm-before-acting policies.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with frontend-design, minimalist-ui, high-end-visual-design, gpt-taste, industrial-brutalist-ui and redesign-existing-projects with partly contradictory style rules."
+      ],
+      "rationale": "Frontend priority but the license is unverifiable, so it cannot be redistributed; frontend-design covers the approved need."
+    },
+    {
+      "id": "find-skills",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/find-skills/SKILL.md",
+        "sha256": "c00eeea0e13e74fe4a9d84ba0a8542205a1b736d65f13134fe1a6647eb14976f",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "skills.sh registry",
+          "GitHub"
+        ],
+        "runtime_tools": [
+          "skills CLI via npx"
+        ],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need shell access to install third-party skills.",
+      "risks": [
+        "Installs third-party skills globally with a non-interactive flag: supply-chain and prompt-injection risk; contradicts the no-global-install rule.",
+        "Network access to an external registry.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Conflicts with the portable catalog model where every skill is reviewed and versioned in this repository."
+      ],
+      "rationale": "Installs unreviewed third-party skills; incompatible with the review gate and with no-global-install."
+    },
+    {
+      "id": "firecrawl",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/firecrawl/SKILL.md",
+        "sha256": "225901513422d21720134ce7d7f659b747636b32219758f24e6b31571259605f",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "Firecrawl API via MCP server"
+        ],
+        "requires_credentials": true
+      },
+      "minimum_permissions": "Would need a configured MCP server and an API key.",
+      "risks": [
+        "Assumes a user-scope MCP server already configured with an API key header: machine-specific coupling and a credential.",
+        "Fetches untrusted web content that can carry prompt injection.",
+        "Interactive page actions including login flows.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with apify (web extraction)."
+      ],
+      "rationale": "External service with credentials, MCP coupling and unverifiable license; MCP configuration is out of scope for this phase."
+    },
+    {
+      "id": "full-output-enforcement",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/full-output-enforcement/SKILL.md",
+        "sha256": "e5bf48b1ae561511439cf71672209a10a88cee0968cc925909ff861dfa0a96a7",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "No special permissions.",
+      "risks": [
+        "Global behavioral override of output length; can conflict with file-count limits and task contracts.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Conflicts with agent limits (max_files_changed) and scoped task contracts when it forces exhaustive output."
+      ],
+      "rationale": "Unverifiable license and a broad behavior override that is not needed by approved skills."
+    },
+    {
+      "id": "gpt-taste",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/gpt-taste/SKILL.md",
+        "sha256": "2e64c269953f2656c21bf5a0fa6b4568e82fe0c72b36e8f84758e090349966a5",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need Read, Grep, Glob, Edit, Write on frontend paths.",
+      "risks": [
+        "Requires the model to simulate a script for randomization; style mandates with absolute wording.",
+        "Prescribes third-party animation libraries.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with high-end-visual-design and design-taste-frontend; contradictory rules on layout variance."
+      ],
+      "rationale": "Style-only skill with unverifiable license; frontend-design is the approved frontend skill."
+    },
+    {
+      "id": "high-end-visual-design",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/high-end-visual-design/SKILL.md",
+        "sha256": "e1e32f5e2d420872c6c7332b53d5ff7721946766b78c4822b424c2d512c8fdbc",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need Read, Grep, Glob, Edit, Write on frontend paths.",
+      "risks": [
+        "Persona and absolute-failure wording; prescriptive visual defaults.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with gpt-taste, design-taste-frontend and minimalist-ui."
+      ],
+      "rationale": "Style-only skill with unverifiable license."
+    },
+    {
+      "id": "image-to-code",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/image-to-code/SKILL.md",
+        "sha256": "4c060a8064a8b13380bc2ef3d6e6a1d0b1e316aa093cd9807d0ce9e4eeb037fa",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "image generation capability of the host tool"
+        ],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need an image-generation tool plus frontend write access.",
+      "risks": [
+        "Written specifically for Codex; not portable across Claude Code and Cursor.",
+        "Forces image generation before implementing, with a high eagerness setting; cost and credential implications.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with imagegen-frontend-web and imagegen-frontend-mobile."
+      ],
+      "rationale": "Provider-specific, external-service dependent and unverifiable license."
+    },
+    {
+      "id": "imagegen-frontend-mobile",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/imagegen-frontend-mobile/SKILL.md",
+        "sha256": "8a33389979f3074fa0926678e266ad2eb9234624472254469fc1ad916b9caa24",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "image generation capability of the host tool"
+        ],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need an image-generation tool.",
+      "risks": [
+        "Depends on a host image-generation service; large prompt (about 40 KB).",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with imagegen-frontend-web and image-to-code."
+      ],
+      "rationale": "External service dependent and unverifiable license."
+    },
+    {
+      "id": "imagegen-frontend-web",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/imagegen-frontend-web/SKILL.md",
+        "sha256": "6b5c2256522fdba1e3313eafa3d743b960a7b13ec029d3e6586e04b23327c1f8",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "image generation capability of the host tool"
+        ],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need an image-generation tool.",
+      "risks": [
+        "Depends on a host image-generation service; hard output rule that multiplies image count and cost.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with imagegen-frontend-mobile and image-to-code."
+      ],
+      "rationale": "External service dependent and unverifiable license."
+    },
+    {
+      "id": "industrial-brutalist-ui",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/industrial-brutalist-ui/SKILL.md",
+        "sha256": "fffbaac8597f07679e9d87145533567658aedba3b5eca6f16a7075a333048caa",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need Read, Grep, Glob, Edit, Write on frontend paths.",
+      "risks": [
+        "Single-aesthetic mandate.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with minimalist-ui and the other taste skills; mutually exclusive aesthetics."
+      ],
+      "rationale": "Style-only skill with unverifiable license."
+    },
+    {
+      "id": "micro-saas-launcher",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/micro-saas-launcher/SKILL.md",
+        "sha256": "b941be706fcb678788b78b0155428e4e1861e512a26ea0765ee8ba6deb0ff427",
+        "files": 1
+      },
+      "license": {
+        "status": "declared-source-only",
+        "evidence": "Frontmatter names the source \"vibeship-spawner-skills (Apache 2.0)\" but ships no license text, copyright holder or repository reference, so the grant cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "No special permissions.",
+      "risks": [
+        "Business advice, not engineering guidance; persona prompt.",
+        "License only declared as free text with no verifiable source.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "None identified with approved skills."
+      ],
+      "rationale": "Outside the Supabase and frontend priorities and the Apache-2.0 claim cannot be verified."
+    },
+    {
+      "id": "minimalist-ui",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/minimalist-ui/SKILL.md",
+        "sha256": "36bc7328f085405f43b476938e62460fa573bf7e984e949e072bcf014831a44c",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need Read, Grep, Glob, Edit, Write on frontend paths.",
+      "risks": [
+        "Absolute bans on common fonts and effects.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Contradicts industrial-brutalist-ui and high-end-visual-design aesthetics."
+      ],
+      "rationale": "Style-only skill with unverifiable license."
+    },
+    {
+      "id": "redesign-existing-projects",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/redesign-existing-projects/SKILL.md",
+        "sha256": "98ad3e5b051bfb71b2795f7e8a6aa0d32b51ee095606c098a4b2822ac07926c9",
+        "files": 1
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need Read, Grep, Glob, Edit, Write on existing project paths.",
+      "risks": [
+        "Rewrites existing UI; risk of unintended large diffs.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with design-taste-frontend (audit-first redesign mode)."
+      ],
+      "rationale": "Useful idea but unverifiable license; the approved frontend-design plus the frontend-expert agent cover safe edits."
+    },
+    {
+      "id": "senior-secops",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/senior-secops/SKILL.md",
+        "sha256": "ef4c19c2f4172ce22ee83755f41b7ca1765032f189667baed9e74b51c4aeac45",
+        "files": 7
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [],
+        "runtime_tools": [
+          "python3"
+        ],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need shell access to run bundled Python scripts that read a target path and write an output file.",
+      "risks": [
+        "Ships three Python scripts (7 files in total) that are generic templates, not audited scanners; they write to a caller-chosen output path.",
+        "Overstated capabilities (\"comprehensive\") could give false assurance.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with the code-reviewer agent for security review."
+      ],
+      "rationale": "Executable scripts without verifiable license or provenance; scripts are never copied."
+    },
+    {
+      "id": "stitch-design-taste",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/stitch-design-taste/SKILL.md",
+        "sha256": "46bdb08fee2dded38b6ba0a051230a502d6ac6e4044afd47592cb40c256028b5",
+        "files": 2
+      },
+      "license": {
+        "status": "none",
+        "evidence": "No license, author or source is declared in the skill files; redistribution rights cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "Google Stitch"
+        ],
+        "requires_credentials": false
+      },
+      "minimum_permissions": "Would need file write access to generate a design document; optional external MCP integration.",
+      "risks": [
+        "Targets an external Google service; optional MCP integration mentioned.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with the design-taste family."
+      ],
+      "rationale": "External service dependent and unverifiable license."
+    },
+    {
+      "id": "stripe-integration",
+      "classification": "QUARANTINED",
+      "origin": {
+        "path": "claude/global/skills/stripe-integration/SKILL.md",
+        "sha256": "d66de010a1b16366a1bc2f93005289cd7d0b5bd0ad213e68782a51f1cdffce50",
+        "files": 1
+      },
+      "license": {
+        "status": "declared-source-only",
+        "evidence": "Frontmatter names the source \"vibeship-spawner-skills (Apache 2.0)\" but ships no license text, copyright holder or repository reference, so the grant cannot be verified."
+      },
+      "dependencies": {
+        "external_services": [
+          "Stripe API"
+        ],
+        "requires_credentials": true
+      },
+      "minimum_permissions": "Would need server write access and Stripe API credentials; payments are high impact.",
+      "risks": [
+        "Payments and webhook handling: errors cost real money; credentials required.",
+        "License only declared as free text with no verifiable source.",
+        "Quarantined: license/provenance not verifiable, so no instruction body is copied; only factual metadata is kept here."
+      ],
+      "conflicts": [
+        "Overlaps with the payment-integration agent (optional) which carries scoped permissions."
+      ],
+      "rationale": "External service with credentials, at most OPTIONAL and never auto-enabled; quarantined because the body cannot be redistributed. Payments remain covered by the payment-integration agent."
+    }
+  ]
+}

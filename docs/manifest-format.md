@@ -28,7 +28,7 @@ manifests list environment variable *names* only.
 ## Kind-specific fields
 
 - **agent**: `permissions` (required), `instructions_path`, `skills[]`, `mcp_servers[]`, `technology_profiles[]`.
-- **skill**: `instructions_path` (required), `requires_mcp[]`, `permissions`.
+- **skill**: `instructions_path` (required), `requires_mcp[]`, `permissions`. Optional portable fields (`activation`, `auto_enable`, `risk`, `license` (incl. `upstream-verified` provenance), `dependencies`, `reference_paths`, `adapters`; required for skills listed as CORE/OPTIONAL in the `skill-catalog` kind: 21 skills, license gate, quarantine rules) are described in [skill-catalog.md](skill-catalog.md).
 - **mcp**: `transport` (`stdio`|`http`), `access` (`read-only`|`read-write`|`admin`), `command`+`args` (stdio, command required) or `url` (http, `https://` and no embedded userinfo, required), `env_vars[]` (names, `UPPER_SNAKE`).
   Optional portable fields (`function`, `read_only`, `independent_of`, `activation`, `contracts`, `limits`; required for agents listed in the catalog) and the `agent-catalog` kind (12 agents: 8 primary, 2 optional, 2 redundant with `superseded_by`) are described in [agent-catalog.md](agent-catalog.md).
 - **adapter**: `target_tool` (must be in the matrix), `tool_versions {min,max}`, `output_dir`, `supports {agents,skills,mcp_servers,technology_profiles}` (ids).
@@ -115,6 +115,7 @@ Secret findings never echo the matched value.
 | `SECRET_PATTERN` | credential-shaped values (cloud/VCS/payment keys, private keys, JWTs, `key=value` assignments, URL userinfo) |
 | `UNSUPPORTED_COMPATIBILITY` | version or tool not in the matrix |
 | `RESULT_INCONSISTENT` | contradictory result statuses |
+| `AGENT_POLICY`, `SKILL_POLICY`, `SKILL_CONTENT`, `RUNTIME_COUPLING` | agent/skill catalog and permission policy, unsafe skill text (prompt injection, hidden text, insecure URLs), OpenClaw/Context7/Spec Kit coupling |
 
 Dangerous-permission checks inspect `tools`, `shell_commands`,
 `authorized_tools`, `validation_commands`, MCP `command`/`args`, and path

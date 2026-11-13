@@ -85,10 +85,23 @@ Phase 2A scaffold plus the shared contracts, schemas and validators above, and
 (Phase 2C) the portable catalog of the 12 original agents (10 manifests:
 8 primary, 2 optional; 2 redundant entries without manifest) under
 `standards/manifests/agents/`, see [docs/agent-catalog.md](docs/agent-catalog.md),
-and PR validation CI. The following are **not yet included** and are
-planned for later phases:
+and PR validation CI, and (Phase 2D) the portable skill catalog of the 21
+original skills (2 CORE manifests, 18 quarantined, 1 deprecated, no adapters
+claimed) under `standards/manifests/skills/`, see
+[docs/skill-catalog.md](docs/skill-catalog.md).
 
-- Skill definitions.
+**Third-party skill provenance and license.** The CORE skill
+`supabase-postgres-best-practices` is carried from the official Supabase
+repository (https://github.com/supabase/agent-skills, snapshot commit
+`f421451c7956d9a79b8257ccc24a7ab6d16037e2`, path
+`skills/supabase-postgres-best-practices`), MIT licensed, Copyright (c) 2026
+Supabase. The full MIT text and a modification notice are in
+`standards/manifests/skills/licenses/`. Of the 37 original files, 30 rule files
+are carried over unchanged; the entry instructions are a modified rewrite. The
+commit and URLs are recorded evidence, not checked at run time, and the snapshot
+may be older than current upstream `main`. The following are **not yet
+included** and are planned for later phases:
+
 - Spec Kit integration.
 - Context7 integration.
 - MCP (Model Context Protocol) server configuration.
