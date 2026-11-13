@@ -115,6 +115,7 @@ Secret findings never echo the matched value.
 | `SECRET_PATTERN` | credential-shaped values (cloud/VCS/payment keys, private keys, JWTs, `key=value` assignments, URL userinfo) |
 | `UNSUPPORTED_COMPATIBILITY` | version or tool not in the matrix |
 | `RESULT_INCONSISTENT` | contradictory result statuses |
+| `SDD_INCOMPLETE`, `SDD_TRACE`, `SDD_GATE`, `SDD_SCOPE`, `SDD_MODE`, `SDD_PIN`, `SDD_INTEGRATION` | SDD workflow, agent map, integration and project records: incomplete artifacts, broken traceability, gate/approval/independence violations, out-of-scope changes, mode violations, wrong upstream pin, unsafe integration settings (see [sdd.md](sdd.md)) |
 | `AGENT_POLICY`, `SKILL_POLICY`, `SKILL_CONTENT`, `RUNTIME_COUPLING` | agent/skill catalog and permission policy, unsafe skill text (prompt injection, hidden text, insecure URLs), OpenClaw/Context7/Spec Kit coupling |
 
 Dangerous-permission checks inspect `tools`, `shell_commands`,

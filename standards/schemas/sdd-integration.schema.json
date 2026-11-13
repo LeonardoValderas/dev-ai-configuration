@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/sdd-integration.schema.json",
+  "title": "Declarative, not-yet-executable external SDD toolkit integration (pinned)",
+  "type": "object",
+  "required": ["kind", "schema_version", "id", "version", "description", "status", "test_status", "execution_allowed_in_this_phase", "upstream", "install", "init", "managed_paths", "conflict_detection", "backup", "rollback", "workflow_order"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "sdd-integration" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "status": { "enum": ["not-installed", "installed"] },
+    "test_status": { "enum": ["untested", "tested"] },
+    "execution_allowed_in_this_phase": { "type": "boolean" },
+    "upstream": {
+      "type": "object",
+      "required": ["repository", "release_tag", "published", "tag_object", "commit", "release_url", "license", "license_url", "copyright"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string", "pattern": "^https://[^\\s]+$" },
+        "release_tag": { "type": "string", "minLength": 1 },
+        "published": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "tag_object": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "release_url": { "type": "string", "pattern": "^https://[^\\s]+$" },
+        "license": { "type": "string", "minLength": 1 },
+        "license_url": { "type": "string", "pattern": "^https://[^\\s]+$" },
+        "copyright": { "type": "string", "minLength": 1 }
+      }
+    },
+    "install": {
+      "type": "object",
+      "required": ["method", "adapter", "package", "source", "pinned", "requires_approval", "auto_install", "network_required"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "const": "adapter" },
+        "adapter": { "$ref": "common.schema.json#/$defs/id" },
+        "package": { "$ref": "common.schema.json#/$defs/id" },
+        "source": { "type": "string", "minLength": 1 },
+        "pinned": { "type": "boolean" },
+        "requires_approval": { "type": "boolean" },
+        "auto_install": { "type": "boolean" },
+        "network_required": { "type": "boolean" }
+      }
+    },
+    "init": {
+      "type": "object",
+      "required": ["command_template", "integration_flag_required", "non_interactive_flag", "force", "existing_project_preconditions"],
+      "additionalProperties": false,
+      "properties": {
+        "command_template": { "type": "string", "minLength": 1 },
+        "integration_flag_required": { "type": "boolean" },
+        "non_interactive_flag": { "type": "string", "minLength": 1 },
+        "force": {
+          "type": "object",
+          "required": ["flag", "default", "requires_approval"],
+          "additionalProperties": false,
+          "properties": {
+            "flag": { "type": "string", "minLength": 1 },
+            "default": { "type": "boolean" },
+            "requires_approval": { "type": "boolean" }
+          }
+        },
+        "existing_project_preconditions": { "$ref": "common.schema.json#/$defs/idList" }
+      }
+    },
+    "managed_paths": {
+      "type": "object",
+      "required": ["paths", "verification", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "paths": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/path" } },
+        "verification": { "enum": ["unverified-pending-first-install", "verified"] },
+        "note": { "$ref": "common.schema.json#/$defs/text" }
+      }
+    },
+    "conflict_detection": {
+      "type": "object",
+      "required": ["enabled", "strategy", "report_required_before_write"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "strategy": { "enum": ["abort-on-conflict"] },
+        "report_required_before_write": { "type": "boolean" }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "required": ["required", "before_any_write", "scope"],
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean" },
+        "before_any_write": { "type": "boolean" },
+        "scope": { "enum": ["managed-paths-and-existing-targets"] }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "required": ["strategy", "verify_after"],
+      "additionalProperties": false,
+      "properties": {
+        "strategy": { "enum": ["restore-from-backup"] },
+        "verify_after": { "type": "boolean" }
+      }
+    },
+    "workflow_order": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/id" } }
+  }
+}

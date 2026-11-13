@@ -69,5 +69,5 @@ reference such infrastructure.
 ## Current status
 
 The canonical phase state lives in one place only: the
-[README](../README.md#current-status-phase-2b). This document describes the
+[README](../README.md#current-status-phase-2e). This document describes the
 layer structure and boundaries, which do not change between phases.

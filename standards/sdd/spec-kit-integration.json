@@ -1,0 +1,62 @@
+{
+  "kind": "sdd-integration",
+  "schema_version": "1.0",
+  "id": "spec-kit",
+  "version": "1.0.0",
+  "description": "Declarative description of a future, optional, adapter-based integration with GitHub Spec Kit. Nothing is installed or executed in this phase. Spec Kit content is not copied into this repository.",
+  "status": "not-installed",
+  "test_status": "untested",
+  "execution_allowed_in_this_phase": false,
+  "upstream": {
+    "repository": "https://github.com/github/spec-kit",
+    "release_tag": "v1.4.0",
+    "published": "2026-11-10",
+    "tag_object": "14ddec8cb22db2a3b50e5ae6861b31053f132bfa",
+    "commit": "0019fa14d12f45edabc2cc3176c9168a68bd0f97",
+    "release_url": "https://github.com/github/spec-kit/releases/tag/v1.4.0",
+    "license": "MIT",
+    "license_url": "https://github.com/github/spec-kit/blob/v1.4.0/LICENSE",
+    "copyright": "Copyright GitHub, Inc."
+  },
+  "install": {
+    "method": "adapter",
+    "adapter": "uv-tool",
+    "package": "specify-cli",
+    "source": "git+https://github.com/github/spec-kit.git@v1.4.0",
+    "pinned": true,
+    "requires_approval": true,
+    "auto_install": false,
+    "network_required": true
+  },
+  "init": {
+    "command_template": "specify init <project> --integration <key>",
+    "integration_flag_required": true,
+    "non_interactive_flag": "--non-interactive",
+    "force": {
+      "flag": "--force",
+      "default": false,
+      "requires_approval": true
+    },
+    "existing_project_preconditions": ["inspect-project", "backup-created", "conflict-report-reviewed", "explicit-approval"]
+  },
+  "managed_paths": {
+    "paths": [".specify/", "specs/"],
+    "verification": "unverified-pending-first-install",
+    "note": "Provisional. Must be confirmed against the pinned release, together with any integration-specific agent command directories, before the first approved install. Anything outside the confirmed list is unmanaged and must never be overwritten."
+  },
+  "conflict_detection": {
+    "enabled": true,
+    "strategy": "abort-on-conflict",
+    "report_required_before_write": true
+  },
+  "backup": {
+    "required": true,
+    "before_any_write": true,
+    "scope": "managed-paths-and-existing-targets"
+  },
+  "rollback": {
+    "strategy": "restore-from-backup",
+    "verify_after": true
+  },
+  "workflow_order": ["constitution", "specify", "clarify", "plan", "checklist", "tasks", "analyze", "implement", "converge", "independent-validation"]
+}

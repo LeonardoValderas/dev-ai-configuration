@@ -1,0 +1,95 @@
+{
+  "kind": "sdd-workflow",
+  "schema_version": "1.0",
+  "version": "1.0.0",
+  "description": "Canonical provider-neutral Spec-Driven Development workflow: ten ordered phases, three modes, blocking gates and artifact contracts. Methodology only; it does not install or execute any external toolkit.",
+  "phases": [
+    { "id": "constitution", "objective": "Record the project principles and non-negotiable constraints that every later artifact must respect.", "produces": [] },
+    { "id": "specify", "objective": "State what is needed and why as testable requirements with acceptance criteria, without choosing a technology.", "produces": ["requirements", "acceptance-criteria"] },
+    { "id": "clarify", "objective": "Resolve every open question in the requirements before planning.", "produces": [] },
+    { "id": "plan", "objective": "Choose the technical approach and record each decision with its rationale and the requirements it serves.", "produces": ["technical-decisions", "risks"] },
+    { "id": "checklist", "objective": "Check requirement quality and testability before tasks are cut.", "produces": [] },
+    { "id": "tasks", "objective": "Break the plan into owned tasks, each linked to requirements and acceptance criteria, with explicit paths.", "produces": ["tasks"] },
+    { "id": "analyze", "objective": "Read-only consistency analysis across requirements, decisions, tasks and scope before any change is made.", "produces": ["traceability"] },
+    { "id": "implement", "objective": "Execute approved tasks by an implementer, inside the declared scope only.", "produces": [] },
+    { "id": "converge", "objective": "Reconcile the implementation with the requirements, decisions and tasks and close any drift.", "produces": [] },
+    { "id": "independent-validation", "objective": "A validator that implemented nothing verifies every acceptance criterion and records evidence. Local final gate.", "produces": ["validation-evidence"] }
+  ],
+  "modes": [
+    {
+      "id": "full",
+      "selection": "New products, new capabilities, cross-cutting or high-risk work, anything touching data models, security or multiple components, or work whose requirements are not yet understood.",
+      "required_phases": ["constitution", "specify", "clarify", "plan", "checklist", "tasks", "analyze", "implement", "converge", "independent-validation"],
+      "skippable_phases": [],
+      "applies_gates": ["pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
+      "traceability": ["requirement-to-criterion", "task-to-requirement", "task-to-criterion", "criterion-to-evidence", "decision-to-requirement", "risk-to-task"],
+      "excluded_change_types": []
+    },
+    {
+      "id": "lightweight",
+      "selection": "Well-understood, bounded changes in an existing project that already has a constitution and an established approach, with a small number of tasks.",
+      "required_phases": ["specify", "plan", "tasks", "implement", "independent-validation"],
+      "skippable_phases": ["constitution", "clarify", "checklist", "analyze", "converge"],
+      "applies_gates": ["pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
+      "traceability": ["requirement-to-criterion", "task-to-requirement", "task-to-criterion", "criterion-to-evidence"],
+      "excluded_change_types": [],
+      "max_tasks": 10
+    },
+    {
+      "id": "hotfix",
+      "selection": "Urgent, narrowly scoped correction of a defect in existing behavior. Never for migrations, production schema changes or new capabilities. Urgency never waives approval or independent validation.",
+      "required_phases": ["specify", "tasks", "implement", "independent-validation"],
+      "skippable_phases": ["constitution", "clarify", "plan", "checklist", "analyze", "converge"],
+      "applies_gates": ["pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
+      "traceability": ["requirement-to-criterion", "task-to-requirement", "task-to-criterion", "criterion-to-evidence"],
+      "excluded_change_types": ["migration", "production-schema"],
+      "max_tasks": 3
+    }
+  ],
+  "gates": [
+    {
+      "id": "pre-implementation",
+      "blocks": "The implement phase and any file change.",
+      "requires_human_approval": true,
+      "requires": ["requirements-complete", "tasks-have-criteria", "traceability-complete", "required-phases-complete", "scope-confined"]
+    },
+    {
+      "id": "pre-migration",
+      "blocks": "Any database or data migration, including its authoring in a runnable form.",
+      "requires_human_approval": true,
+      "requires": ["pre-implementation-passed", "rollback-plan-recorded"]
+    },
+    {
+      "id": "pre-production-mutation",
+      "blocks": "Any change to production data, production schema or production configuration.",
+      "requires_human_approval": true,
+      "requires": ["pre-implementation-passed", "rollback-plan-recorded"]
+    },
+    {
+      "id": "pre-deployment",
+      "blocks": "Any deployment or release.",
+      "requires_human_approval": true,
+      "requires": ["pre-implementation-passed", "independent-validation"]
+    },
+    {
+      "id": "pass",
+      "blocks": "Recording a PASS validation result.",
+      "requires_human_approval": false,
+      "requires": ["independent-validation", "useful-evidence", "all-criteria-covered", "tasks-done"]
+    }
+  ],
+  "artifact_contracts": [
+    { "id": "requirements", "required_fields": ["id", "statement", "acceptance-criteria"], "produced_in": "specify" },
+    { "id": "acceptance-criteria", "required_fields": ["id", "requirement", "statement", "verification"], "produced_in": "specify" },
+    { "id": "technical-decisions", "required_fields": ["id", "statement", "rationale", "requirements"], "produced_in": "plan" },
+    { "id": "tasks", "required_fields": ["id", "title", "owner", "requirements", "acceptance-criteria"], "produced_in": "tasks" },
+    { "id": "risks", "required_fields": ["id", "description", "severity", "mitigation"], "produced_in": "plan" },
+    { "id": "validation-evidence", "required_fields": ["description", "criteria"], "produced_in": "independent-validation" },
+    { "id": "traceability", "required_fields": [], "produced_in": "analyze" }
+  ],
+  "milestones": {
+    "compatibility": "additive-read-only",
+    "writes_allowed": false,
+    "reference_field": "milestone_ref"
+  }
+}

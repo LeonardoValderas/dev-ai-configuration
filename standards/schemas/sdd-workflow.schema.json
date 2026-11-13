@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/sdd-workflow.schema.json",
+  "title": "Canonical provider-neutral SDD workflow (phases, modes, gates, artifact contracts)",
+  "type": "object",
+  "required": ["kind", "schema_version", "version", "description", "phases", "modes", "gates", "artifact_contracts", "milestones"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "sdd-workflow" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "objective", "produces"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "objective": { "$ref": "common.schema.json#/$defs/text" },
+          "produces": { "$ref": "common.schema.json#/$defs/idList" }
+        }
+      }
+    },
+    "modes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "selection", "required_phases", "skippable_phases", "applies_gates", "traceability", "excluded_change_types"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "selection": { "$ref": "common.schema.json#/$defs/text" },
+          "required_phases": { "$ref": "common.schema.json#/$defs/idList" },
+          "skippable_phases": { "$ref": "common.schema.json#/$defs/idList" },
+          "applies_gates": { "$ref": "common.schema.json#/$defs/idList" },
+          "traceability": { "$ref": "common.schema.json#/$defs/idList" },
+          "excluded_change_types": { "$ref": "common.schema.json#/$defs/idList" },
+          "max_tasks": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "blocks", "requires_human_approval", "requires"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "blocks": { "$ref": "common.schema.json#/$defs/text" },
+          "requires_human_approval": { "type": "boolean" },
+          "requires": { "$ref": "common.schema.json#/$defs/idList" }
+        }
+      }
+    },
+    "artifact_contracts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "required_fields", "produced_in"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "required_fields": { "$ref": "common.schema.json#/$defs/idList" },
+          "produced_in": { "$ref": "common.schema.json#/$defs/id" }
+        }
+      }
+    },
+    "milestones": {
+      "type": "object",
+      "required": ["compatibility", "writes_allowed", "reference_field"],
+      "additionalProperties": false,
+      "properties": {
+        "compatibility": { "const": "additive-read-only" },
+        "writes_allowed": { "const": false },
+        "reference_field": { "const": "milestone_ref" }
+      }
+    }
+  }
+}

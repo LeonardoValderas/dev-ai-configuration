@@ -5,7 +5,7 @@ import { validatePaths, DEFAULT_INPUTS, REPO_ROOT } from './lib/run.mjs';
 
 const USAGE = `Usage: node installer/validate.mjs [--json] [--matrix <file>] [path ...]
 Validates manifests, task contracts and results (files or directories).
-Default paths: standards/manifests and compatibility. Never modifies files.
+Default paths: standards/manifests, standards/sdd and compatibility. Never modifies files.
 All paths and --matrix must lie inside this repository (the fixed authorized
 root). Symlinks are rejected, never followed.`;
 

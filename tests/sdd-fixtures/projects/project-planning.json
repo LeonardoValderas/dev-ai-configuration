@@ -1,0 +1,32 @@
+{
+  "kind": "sdd-project",
+  "schema_version": "1.0",
+  "id": "fixture-planning",
+  "mode": "full",
+  "objective": "Synthetic fixture: a Full SDD project still in planning; nothing started, no approval yet.",
+  "milestone_ref": "milestones/milestone-01.md",
+  "completed_phases": ["constitution", "specify", "clarify", "plan", "checklist", "tasks", "analyze"],
+  "skipped_phases": [],
+  "scope": {
+    "allowed_paths": ["src", "migrations"],
+    "prohibited_paths": []
+  },
+  "requirements": [
+    { "id": "req-1", "statement": "Stored items gain an optional note field.", "acceptance_criteria": ["ac-1"], "open_questions": [] }
+  ],
+  "acceptance_criteria": [
+    { "id": "ac-1", "requirement": "req-1", "statement": "Existing items remain readable after the change.", "verification": "Migration dry run against a copy of the data." }
+  ],
+  "decisions": [
+    { "id": "dec-1", "statement": "Add a nullable column.", "rationale": "A nullable column is backward compatible with existing readers.", "requirements": ["req-1"] }
+  ],
+  "tasks": [
+    { "id": "task-1", "title": "Author the migration", "owner": "backend-expert", "change_type": "migration", "status": "planned", "requirements": ["req-1"], "acceptance_criteria": ["ac-1"], "paths": ["migrations"] }
+  ],
+  "risks": [
+    { "id": "risk-1", "description": "Migration could lock the table.", "severity": "high", "mitigation": "Run during a quiet window; rollback by dropping the nullable column.", "tasks": ["task-1"] }
+  ],
+  "approvals": [],
+  "files_changed": [],
+  "validation": { "validation_result": "NOT-RUN", "validated_by": "", "evidence": [] }
+}
