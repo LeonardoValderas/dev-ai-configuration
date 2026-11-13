@@ -77,7 +77,7 @@ See [docs/security-principles.md](docs/security-principles.md).
 See [docs/manifest-format.md](docs/manifest-format.md) and
 [docs/adding-components.md](docs/adding-components.md).
 
-## Current status: Phase 2F
+## Current status: Phase 2G
 
 _This section is the single canonical phase-state reference; other documents link here._
 
@@ -114,7 +114,13 @@ included** and are planned for later phases:
 - Context7 installation and runtime connection (declaration and validation are delivered).
 - Executable MCP (Model Context Protocol) client/server configuration (declarations,
   policy validation and non-executable provider templates are delivered).
-- Adapter content and installer logic beyond validation.
+- Adapters for tools other than Claude Code (Codex, Cursor).
+
+Phase 2G adds the portable Claude Code project adapter (`adapters/claude-code/`):
+it generates and safely applies project-scoped agents, the two CORE skills, SDD
+and contract rules, and a disabled-by-default Context7 setting. See
+[docs/claude-code-adapter.md](docs/claude-code-adapter.md) for usage and the
+separation of real versus simulated evidence.
 
 Phase 2F adds an optional, disabled Context7 declaration and a sanitized,
 quarantined MCP reference inventory. See the [portable MCP catalog, policy,
