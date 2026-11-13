@@ -1,0 +1,41 @@
+{
+  "kind": "sdd-project",
+  "schema_version": "1.0",
+  "id": "fixture-lightweight",
+  "mode": "lightweight",
+  "objective": "Synthetic fixture: a completed Lightweight SDD project used only by validator tests.",
+  "completed_phases": ["specify", "plan", "tasks", "implement", "independent-validation"],
+  "skipped_phases": [
+    { "phase": "constitution", "reason": "The project already has a recorded constitution." },
+    { "phase": "clarify", "reason": "No open questions remain." },
+    { "phase": "checklist", "reason": "Single small requirement." },
+    { "phase": "analyze", "reason": "Single small requirement." },
+    { "phase": "converge", "reason": "No drift from the plan." }
+  ],
+  "scope": {
+    "allowed_paths": ["src"],
+    "prohibited_paths": []
+  },
+  "requirements": [
+    { "id": "req-1", "statement": "The label text is configurable.", "acceptance_criteria": ["ac-1"], "open_questions": [] }
+  ],
+  "acceptance_criteria": [
+    { "id": "ac-1", "requirement": "req-1", "statement": "Changing the setting changes the label.", "verification": "Unit test toggling the setting." }
+  ],
+  "decisions": [],
+  "tasks": [
+    { "id": "task-1", "title": "Read the label from settings", "owner": "frontend-expert", "change_type": "code", "status": "done", "requirements": ["req-1"], "acceptance_criteria": ["ac-1"], "paths": ["src/ui"] }
+  ],
+  "risks": [],
+  "approvals": [
+    { "gate": "pre-implementation", "granted": true, "approver_type": "human", "approver": "project-owner", "reference": "approval record 2 in the project tracker" }
+  ],
+  "files_changed": ["src/ui/label.txt"],
+  "validation": {
+    "validation_result": "PASS",
+    "validated_by": "code-reviewer",
+    "evidence": [
+      { "description": "Reviewed the diff and the unit test run; the setting drives the label.", "command": "npm test", "output_summary": "all tests passed", "criteria": ["ac-1"] }
+    ]
+  }
+}

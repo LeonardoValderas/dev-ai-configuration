@@ -77,7 +77,7 @@ See [docs/security-principles.md](docs/security-principles.md).
 See [docs/manifest-format.md](docs/manifest-format.md) and
 [docs/adding-components.md](docs/adding-components.md).
 
-## Current status: Phase 2B
+## Current status: Phase 2E
 
 _This section is the single canonical phase-state reference; other documents link here._
 
@@ -88,7 +88,15 @@ Phase 2A scaffold plus the shared contracts, schemas and validators above, and
 and PR validation CI, and (Phase 2D) the portable skill catalog of the 21
 original skills (2 CORE manifests, 18 quarantined, 1 deprecated, no adapters
 claimed) under `standards/manifests/skills/`, see
-[docs/skill-catalog.md](docs/skill-catalog.md).
+[docs/skill-catalog.md](docs/skill-catalog.md), and (Phase 2E) the
+provider-neutral Spec-Driven Development (SDD) methodology under
+`standards/sdd/`: one canonical ten-phase workflow, Full / Lightweight / Hotfix
+modes, blocking gates, artifact contracts, an agent-to-phase map (all 8 primary
+agents plus the independent `code-reviewer`), and a declarative, **not
+installed, untested and not executable** integration manifest pinned to GitHub
+Spec Kit v1.4.0. See [docs/sdd.md](docs/sdd.md) and
+[docs/sdd-adoption.md](docs/sdd-adoption.md). Spec Kit is neither installed, run
+nor copied by this repository; no provider compatibility is claimed.
 
 **Third-party skill provenance and license.** The CORE skill
 `supabase-postgres-best-practices` is carried from the official Supabase
@@ -102,7 +110,7 @@ commit and URLs are recorded evidence, not checked at run time, and the snapshot
 may be older than current upstream `main`. The following are **not yet
 included** and are planned for later phases:
 
-- Spec Kit integration.
+- Spec Kit installation and execution (only the declarative manifest exists).
 - Context7 integration.
 - MCP (Model Context Protocol) server configuration.
 - Adapter content and installer logic beyond validation.

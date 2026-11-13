@@ -1,7 +1,7 @@
 // Semantic (non-schema) checks: dangerous permissions, absolute paths,
 // secrets, result consistency. Pure functions over parsed JSON; no I/O.
 
-export const PATH_KEYS = new Set(['allowed_paths', 'prohibited_paths', 'files_changed', 'writable_paths', 'instructions_path', 'output_dir', 'reference_paths', 'notice_path', 'license_path']);
+export const PATH_KEYS = new Set(['allowed_paths', 'prohibited_paths', 'files_changed', 'writable_paths', 'instructions_path', 'output_dir', 'reference_paths', 'notice_path', 'license_path', 'paths', 'milestone_ref']);
 const COMMAND_KEYS = new Set(['tools', 'shell_commands', 'authorized_tools', 'validation_commands']);
 const BROAD_PATH_KEYS = new Set(['writable_paths', 'allowed_paths']);
 

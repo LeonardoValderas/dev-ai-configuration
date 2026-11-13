@@ -6,12 +6,13 @@ import { assertSupportedSchema, validateSchema } from './schema.mjs';
 import { confine } from './confine.mjs';
 import { checkAgentPolicy, checkCatalog, checkRuntimeCoupling, checkInstructionsCoupling } from './agents.mjs';
 import { checkSkillPolicy, checkSkillCatalog, checkSkillCoupling, checkSkillContent, relativeLinks, isExternal } from './skills.mjs';
+import { checkWorkflow, checkAgentMap, checkIntegration, checkProject } from './sdd.mjs';
 import { checkDangerous, checkPaths, checkSecrets, checkResult } from './checks.mjs';
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCHEMA_DIR = join(REPO_ROOT, 'standards', 'schemas');
 export const DEFAULT_MATRIX = join(REPO_ROOT, 'compatibility', 'matrix.json');
-export const DEFAULT_INPUTS = [join(REPO_ROOT, 'standards', 'manifests'), join(REPO_ROOT, 'compatibility')];
+export const DEFAULT_INPUTS = [join(REPO_ROOT, 'standards', 'manifests'), join(REPO_ROOT, 'standards', 'sdd'), join(REPO_ROOT, 'compatibility')];
 
 const KIND_SCHEMA = {
   agent: 'agent-manifest.schema.json',
@@ -24,7 +25,12 @@ const KIND_SCHEMA = {
   'compatibility-matrix': 'compatibility-matrix.schema.json',
   'task-contract': 'task-contract.schema.json',
   result: 'result.schema.json',
+  'sdd-workflow': 'sdd-workflow.schema.json',
+  'sdd-agent-map': 'sdd-agent-map.schema.json',
+  'sdd-integration': 'sdd-integration.schema.json',
+  'sdd-project': 'sdd-project.schema.json',
 };
+const SDD_KINDS = new Set(['sdd-workflow', 'sdd-agent-map', 'sdd-integration', 'sdd-project']);
 const MANIFEST_KINDS = new Set(['agent', 'skill', 'mcp', 'adapter', 'technology-profile']);
 const REFERENCES = {
   agent: [['independent_of', 'agent'], ['skills', 'skill'], ['mcp_servers', 'mcp'], ['technology_profiles', 'technology-profile']],
@@ -91,6 +97,7 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
   const valid = [];
   const catalogs = [];
   const skillCatalogs = [];
+  const sddDocs = [];
   const schemaFailed = new Set();
   for (const { file, doc } of docs) {
     const tag = (list) => list.forEach((e) => errors.push({ ...e, file }));
@@ -109,6 +116,7 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
     if (doc.kind === 'skill' || doc.kind === 'skill-catalog') tag(checkSkillCoupling(doc));
     if (doc.kind === 'agent-catalog' && schemaErrors.length === 0) catalogs.push({ file, doc });
     if (doc.kind === 'skill-catalog' && schemaErrors.length === 0) skillCatalogs.push({ file, doc });
+    if (SDD_KINDS.has(doc.kind) && schemaErrors.length === 0) sddDocs.push({ file, doc });
     if (MANIFEST_KINDS.has(doc.kind) && typeof doc.id === 'string') {
       if (basename(file) !== `${doc.id}.json`) tag([{ code: 'FILE_STRUCTURE', rule: 'filename-mismatch', path: '$.id', message: `file name must be "${doc.id}.json"` }]);
       if (typeof doc.instructions_path === 'string' && !doc.instructions_path.startsWith('/') && !doc.instructions_path.split(/[\\/]/).includes('..')) {
@@ -154,6 +162,8 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
   }
 
   checkSkills({ valid, schemaFailed, skillCatalogs, root, errors });
+  const primary = catalogs[0] ? new Set(catalogs[0].doc.agents.filter((e) => e.classification === 'primary').map((e) => e.id)) : null;
+  checkSdd({ sddDocs, agentDocs, primary, root, errors });
 
   // declared compatibility
   const matrices = docs.filter(({ doc }) => doc?.kind === 'compatibility-matrix');
@@ -198,6 +208,28 @@ function listFiles(dir) {
     if (s.isDirectory()) out.push(...listFiles(p)); else out.push(p);
   }
   return out;
+}
+
+// SDD policy: workflow, agent map, integration and project records. Cross-file
+// references (workflow, agent map, agent manifests) must be part of the validated set.
+function checkSdd({ sddDocs, agentDocs, primary, root, errors }) {
+  const push = (file, list) => list.forEach((e) => errors.push({ file, ...e }));
+  const of = (kind) => sddDocs.filter((d) => d.doc.kind === kind);
+  const [workflows, maps, integrations, projects] = ['sdd-workflow', 'sdd-agent-map', 'sdd-integration', 'sdd-project'].map(of);
+  for (const [name, list] of [['workflow', workflows], ['agent map', maps], ['integration', integrations]]) {
+    if (list.length > 1) errors.push({ code: 'DUPLICATE_ID', file: list[1].file, path: '$', message: `more than one SDD ${name} supplied` });
+  }
+  const workflow = workflows[0];
+  const map = maps[0];
+  if (workflow) push(workflow.file, checkWorkflow(workflow.doc));
+  if (map) push(map.file, checkAgentMap(map.doc, { agentDocs: new Map([...agentDocs].map(([id, v]) => [id, v.doc])), primary }));
+  for (const i of integrations) push(i.file, checkIntegration(i.doc, workflow?.doc));
+  for (const p of projects) {
+    for (const [dep, kind] of [[workflow, 'sdd-workflow'], [map, 'sdd-agent-map']]) {
+      if (!dep) errors.push({ code: 'MISSING_REFERENCE', rule: kind, file: p.file, path: '$', message: `SDD project requires an ${kind} document in the validated set` });
+    }
+    if (workflow && map) push(p.file, checkProject(p.doc, { workflow: workflow.doc, agentMap: map.doc, projectFile: p.file, root }));
+  }
 }
 
 // Skill policy: strict rules for catalog-linked skills, catalog consistency,

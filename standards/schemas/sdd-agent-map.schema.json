@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/sdd-agent-map.schema.json",
+  "title": "Mapping of agents to SDD phases and roles (data only; agent manifests are not modified)",
+  "type": "object",
+  "required": ["kind", "schema_version", "version", "description", "agents"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "sdd-agent-map" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["agent", "role", "phases", "may_implement", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "agent": { "$ref": "common.schema.json#/$defs/id" },
+          "role": { "enum": ["analyst", "planner", "specifier", "implementer", "independent-validator"] },
+          "phases": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/id" } },
+          "may_implement": { "type": "boolean" },
+          "rationale": { "$ref": "common.schema.json#/$defs/text" }
+        }
+      }
+    }
+  }
+}
