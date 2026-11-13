@@ -1,0 +1,374 @@
+{
+  "missing-required-field": {
+    "codes": [
+      "SCHEMA_MISSING_FIELD"
+    ]
+  },
+  "wrong-type-version": {
+    "codes": [
+      "SCHEMA_WRONG_TYPE"
+    ]
+  },
+  "wrong-type-array": {
+    "codes": [
+      "SCHEMA_WRONG_TYPE"
+    ]
+  },
+  "unknown-field-provider-config": {
+    "codes": [
+      "SCHEMA_UNKNOWN_FIELD"
+    ]
+  },
+  "invalid-enum-transport": {
+    "codes": [
+      "SCHEMA_INVALID_VALUE"
+    ]
+  },
+  "invalid-enum-permission-mode": {
+    "codes": [
+      "SCHEMA_INVALID_VALUE"
+    ]
+  },
+  "bad-id-pattern": {
+    "codes": [
+      "SCHEMA_CONSTRAINT"
+    ]
+  },
+  "bad-version-pattern": {
+    "codes": [
+      "SCHEMA_CONSTRAINT"
+    ]
+  },
+  "mcp-http-missing-url": {
+    "codes": [
+      "SCHEMA_MISSING_FIELD"
+    ]
+  },
+  "mcp-stdio-missing-command": {
+    "codes": [
+      "SCHEMA_MISSING_FIELD"
+    ]
+  },
+  "mcp-url-with-credentials-shape": {
+    "codes": [
+      "SCHEMA_CONSTRAINT"
+    ]
+  },
+  "invalid-json": {
+    "codes": [
+      "INVALID_JSON"
+    ]
+  },
+  "unknown-kind": {
+    "codes": [
+      "UNKNOWN_KIND"
+    ]
+  },
+  "missing-kind": {
+    "codes": [
+      "SCHEMA_MISSING_FIELD"
+    ]
+  },
+  "filename-mismatch": {
+    "codes": [
+      "FILE_STRUCTURE"
+    ],
+    "rule": "filename-mismatch"
+  },
+  "unexpected-file": {
+    "codes": [
+      "FILE_STRUCTURE"
+    ],
+    "rule": "unexpected-file"
+  },
+  "missing-instructions-file": {
+    "codes": [
+      "MISSING_REFERENCE"
+    ],
+    "rule": "instructions-file"
+  },
+  "missing-ref-agent-skill": {
+    "codes": [
+      "MISSING_REFERENCE"
+    ],
+    "rule": "component"
+  },
+  "missing-ref-skill-mcp": {
+    "codes": [
+      "MISSING_REFERENCE"
+    ],
+    "rule": "component"
+  },
+  "missing-ref-adapter-agent": {
+    "codes": [
+      "MISSING_REFERENCE"
+    ],
+    "rule": "component"
+  },
+  "missing-ref-profile-skill": {
+    "codes": [
+      "MISSING_REFERENCE"
+    ],
+    "rule": "component"
+  },
+  "duplicate-id": {
+    "codes": [
+      "DUPLICATE_ID"
+    ]
+  },
+  "danger-force-push": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "force-push"
+  },
+  "danger-force-push-short-flag": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "force-push"
+  },
+  "danger-bypass-mode": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "bypass-permissions"
+  },
+  "danger-bypass-flag": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "bypass-permissions"
+  },
+  "danger-destructive-delete-root": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "destructive-delete"
+  },
+  "danger-destructive-delete-wildcard": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "destructive-delete"
+  },
+  "danger-destructive-delete-home": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "destructive-delete"
+  },
+  "danger-production-deploy": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "production-mutation"
+  },
+  "danger-production-migrate": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "production-mutation"
+  },
+  "danger-production-access-mutate": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "production-mutation"
+  },
+  "danger-broad-bash-tool": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "broad-tool-grant"
+  },
+  "danger-broad-wildcard-tool": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "broad-tool-grant"
+  },
+  "danger-pipe-to-shell": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "broad-tool-grant"
+  },
+  "danger-broad-write-path": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "broad-path-grant"
+  },
+  "danger-mcp-admin-access": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "broad-tool-grant"
+  },
+  "danger-task-validation-command": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "force-push"
+  },
+  "danger-task-broad-allowed-path": {
+    "codes": [
+      "DANGEROUS_PERMISSION"
+    ],
+    "rule": "broad-path-grant"
+  },
+  "abs-path-unix-field": {
+    "codes": [
+      "ABSOLUTE_PATH"
+    ]
+  },
+  "abs-path-unix-in-text": {
+    "codes": [
+      "ABSOLUTE_PATH"
+    ]
+  },
+  "abs-path-windows": {
+    "codes": [
+      "ABSOLUTE_PATH"
+    ]
+  },
+  "abs-path-home-tilde": {
+    "codes": [
+      "ABSOLUTE_PATH"
+    ]
+  },
+  "abs-path-root-slash": {
+    "codes": [
+      "ABSOLUTE_PATH"
+    ]
+  },
+  "path-traversal": {
+    "codes": [
+      "PATH_TRAVERSAL"
+    ]
+  },
+  "secret-aws-key": {
+    "codes": [
+      "SECRET_PATTERN"
+    ],
+    "rule": "aws-access-key"
+  },
+  "secret-github-token": {
+    "codes": [
+      "SECRET_PATTERN"
+    ],
+    "rule": "github-token"
+  },
+  "secret-stripe-key": {
+    "codes": [
+      "SECRET_PATTERN"
+    ],
+    "rule": "stripe-key"
+  },
+  "secret-private-key": {
+    "codes": [
+      "SECRET_PATTERN"
+    ],
+    "rule": "private-key-block"
+  },
+  "secret-assignment": {
+    "codes": [
+      "SECRET_PATTERN"
+    ],
+    "rule": "credential-assignment"
+  },
+  "secret-url-credentials": {
+    "codes": [
+      "SECRET_PATTERN"
+    ],
+    "rule": "url-credentials"
+  },
+  "secret-in-task": {
+    "codes": [
+      "SECRET_PATTERN"
+    ],
+    "rule": "github-token"
+  },
+  "unsupported-schema-version": {
+    "codes": [
+      "UNSUPPORTED_COMPATIBILITY"
+    ]
+  },
+  "unsupported-standard-version": {
+    "codes": [
+      "UNSUPPORTED_COMPATIBILITY"
+    ]
+  },
+  "unsupported-target-tool": {
+    "codes": [
+      "UNSUPPORTED_COMPATIBILITY"
+    ]
+  },
+  "unsupported-task-schema-version": {
+    "codes": [
+      "UNSUPPORTED_COMPATIBILITY"
+    ]
+  },
+  "task-missing-rollback": {
+    "codes": [
+      "SCHEMA_MISSING_FIELD"
+    ]
+  },
+  "task-wrong-type-allowed-paths": {
+    "codes": [
+      "SCHEMA_WRONG_TYPE"
+    ]
+  },
+  "task-empty-acceptance-criteria": {
+    "codes": [
+      "SCHEMA_CONSTRAINT"
+    ]
+  },
+  "task-unknown-field": {
+    "codes": [
+      "SCHEMA_UNKNOWN_FIELD"
+    ]
+  },
+  "result-bad-execution-status": {
+    "codes": [
+      "SCHEMA_INVALID_VALUE"
+    ]
+  },
+  "result-bad-validation-result": {
+    "codes": [
+      "SCHEMA_INVALID_VALUE"
+    ]
+  },
+  "result-missing-evidence": {
+    "codes": [
+      "SCHEMA_MISSING_FIELD"
+    ]
+  },
+  "result-wrong-type-warnings": {
+    "codes": [
+      "SCHEMA_WRONG_TYPE"
+    ]
+  },
+  "result-complete-with-blockers": {
+    "codes": [
+      "RESULT_INCONSISTENT"
+    ]
+  },
+  "result-blocked-without-blockers": {
+    "codes": [
+      "RESULT_INCONSISTENT"
+    ]
+  },
+  "result-blocked-but-pass": {
+    "codes": [
+      "RESULT_INCONSISTENT"
+    ]
+  },
+  "result-complete-empty-evidence": {
+    "codes": [
+      "RESULT_INCONSISTENT"
+    ],
+    "rule": "empty-evidence"
+  }
+}

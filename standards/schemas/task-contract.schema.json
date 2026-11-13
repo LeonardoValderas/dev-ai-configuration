@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/task-contract.schema.json",
+  "title": "Common task contract",
+  "type": "object",
+  "required": ["schema_version", "kind", "objective", "verified_context", "allowed_paths", "prohibited_paths", "constraints", "authorized_tools", "acceptance_criteria", "required_evidence", "validation_commands", "rollback"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "kind": { "const": "task-contract" },
+    "objective": { "$ref": "common.schema.json#/$defs/text" },
+    "verified_context": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["statement", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "statement": { "$ref": "common.schema.json#/$defs/text" },
+          "source": { "$ref": "common.schema.json#/$defs/text" }
+        }
+      }
+    },
+    "allowed_paths": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/path" } },
+    "prohibited_paths": { "$ref": "common.schema.json#/$defs/pathList" },
+    "constraints": { "$ref": "common.schema.json#/$defs/textList" },
+    "authorized_tools": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/text" } },
+    "acceptance_criteria": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/text" } },
+    "required_evidence": { "$ref": "common.schema.json#/$defs/textList" },
+    "validation_commands": { "$ref": "common.schema.json#/$defs/textList" },
+    "rollback": { "$ref": "common.schema.json#/$defs/text" }
+  }
+}

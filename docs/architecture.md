@@ -31,14 +31,14 @@ personal values.
 ### 4. Installer (`installer/`)
 
 The mechanism that will eventually apply standards and adapters to a
-target machine or project. In Phase 2A this directory is a placeholder
-only — no installation logic is implemented.
+target machine or project. It currently contains only the read-only
+validator (`validate.mjs`); no installation logic is implemented.
 
 ### 5. Compatibility (`compatibility/`)
 
 Notes and (eventually) checks describing which versions of which tools
-are known to work with which versions of this standard. Placeholder in
-Phase 2A.
+are known to work with which versions of this standard. Currently holds
+`matrix.json` (see the README for current phase state).
 
 ### 6. Docs (`docs/`)
 
@@ -68,7 +68,6 @@ reference such infrastructure.
 
 ## Current status
 
-Phase 2A only. This repository currently contains scaffold structure
-and documentation. It does not yet contain actual standards content,
-adapter implementations, templates, or installer logic — those are
-future phases.
+The canonical phase state lives in one place only: the
+[README](../README.md#current-status-phase-2b). This document describes the
+layer structure and boundaries, which do not change between phases.

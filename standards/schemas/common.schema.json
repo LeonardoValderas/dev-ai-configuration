@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/common.schema.json",
+  "title": "Shared definitions",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "idList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "uniqueItems": true
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "textList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pathList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/path"
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "required": [
+        "standard"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "standard": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/schemaVersion"
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "required": [
+        "tools"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "$ref": "#/$defs/textList"
+        },
+        "shell_commands": {
+          "$ref": "#/$defs/textList"
+        },
+        "writable_paths": {
+          "$ref": "#/$defs/pathList"
+        },
+        "permission_mode": {
+          "enum": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "bypassPermissions"
+          ]
+        },
+        "production_access": {
+          "enum": [
+            "none",
+            "read-only",
+            "mutate"
+          ]
+        }
+      }
+    }
+  }
+}

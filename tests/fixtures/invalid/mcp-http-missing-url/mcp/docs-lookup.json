@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "kind": "mcp",
+  "id": "docs-lookup",
+  "version": "1.0.0",
+  "name": "docs-lookup",
+  "description": "Synthetic mcp fixture",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "transport": "http",
+  "env_vars": [],
+  "access": "read-only"
+}

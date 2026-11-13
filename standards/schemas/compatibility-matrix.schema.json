@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/compatibility-matrix.schema.json",
+  "title": "Compatibility matrix",
+  "type": "object",
+  "required": ["schema_version", "kind", "supported_schema_versions", "supported_standard_versions", "supported_tools"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "kind": { "const": "compatibility-matrix" },
+    "supported_schema_versions": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/schemaVersion" } },
+    "supported_standard_versions": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/schemaVersion" } },
+    "supported_tools": { "$ref": "common.schema.json#/$defs/idList" }
+  }
+}

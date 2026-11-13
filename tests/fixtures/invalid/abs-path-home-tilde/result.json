@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "kind": "result",
+  "execution_status": "COMPLETE",
+  "validation_result": "PASS",
+  "files_changed": [
+    "~/notes.txt"
+  ],
+  "evidence": [
+    {
+      "description": "Unit tests pass",
+      "command": "npm test",
+      "output_summary": "12 passed"
+    }
+  ],
+  "warnings": [],
+  "unresolved_blockers": []
+}

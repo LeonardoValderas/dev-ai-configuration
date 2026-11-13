@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev-ai-configuration.invalid/schemas/agent-manifest.schema.json",
+  "title": "Agent manifest",
+  "type": "object",
+  "required": ["kind", "schema_version", "id", "version", "name", "description", "compatibility", "permissions"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "agent" },
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "name": { "$ref": "common.schema.json#/$defs/text" },
+    "description": { "$ref": "common.schema.json#/$defs/text" },
+    "compatibility": { "$ref": "common.schema.json#/$defs/compatibility" },
+    "instructions_path": { "$ref": "common.schema.json#/$defs/path" },
+    "skills": { "$ref": "common.schema.json#/$defs/idList" },
+    "mcp_servers": { "$ref": "common.schema.json#/$defs/idList" },
+    "technology_profiles": { "$ref": "common.schema.json#/$defs/idList" },
+    "permissions": { "$ref": "common.schema.json#/$defs/permissions" }
+  }
+}

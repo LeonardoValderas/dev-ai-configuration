@@ -1,0 +1,37 @@
+{
+  "schema_version": "3.0",
+  "kind": "task-contract",
+  "objective": "Add input validation to the parser",
+  "verified_context": [
+    {
+      "statement": "Parser lives in src/parser",
+      "source": "repository inspection"
+    }
+  ],
+  "allowed_paths": [
+    "src/parser/**",
+    "tests/parser/**"
+  ],
+  "prohibited_paths": [
+    "**/.env*",
+    "infra/**"
+  ],
+  "constraints": [
+    "No new dependencies"
+  ],
+  "authorized_tools": [
+    "Read",
+    "Edit",
+    "Bash(npm test)"
+  ],
+  "acceptance_criteria": [
+    "Invalid input is rejected"
+  ],
+  "required_evidence": [
+    "test output"
+  ],
+  "validation_commands": [
+    "npm test"
+  ],
+  "rollback": "Revert the working tree changes"
+}
