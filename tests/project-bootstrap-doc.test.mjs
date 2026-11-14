@@ -7,38 +7,37 @@ const readme = readFileSync(new URL('README.md', root), 'utf8');
 const doc = readFileSync(new URL('docs/project-bootstrap.md', root), 'utf8');
 const architecture = readFileSync(new URL('docs/architecture.md', root), 'utf8');
 
-test('README links the design doc and states design only', () => {
-  assert.match(readme, /\(docs\/project-bootstrap\.md\)/);
-  assert.match(readme, /Phase 2I-A/);
-  assert.match(doc, /DESIGN ONLY/);
+test('README and docs describe the implemented bootstrap, not a design-only state', () => {
+  assert.match(readme, /\(docs\/project-bootstrap\.md/);
+  assert.match(readme, /Phase 2I-B/);
+  assert.match(doc, /IMPLEMENTED/);
+  for (const t of [readme, doc, architecture]) {
+    assert.doesNotMatch(t, /NOT EXECUTABLE/);
+    assert.doesNotMatch(t, /DESIGN ONLY/);
+    assert.doesNotMatch(t, /PROPOSED/);
+  }
+  assert.match(architecture, /\[Project bootstrap\]\(project-bootstrap\.md\)/);
 });
 
-test('architecture links the project bootstrap design without claiming implementation', () => {
-  assert.match(architecture, /\[Project bootstrap design\]\(project-bootstrap\.md\)/);
-  assert.match(architecture, /design\s+only/i);
-  assert.match(architecture, /does not make the proposed common CLI executable/i);
+test('every bootstrap command is documented with an executable invocation', () => {
+  for (const c of ['plan', 'apply', 'verify', 'update', 'uninstall']) assert.ok(doc.includes(`node installer/bootstrap.mjs ${c}`), c);
+  for (const c of ['plan', 'apply', 'verify', 'update', 'uninstall']) assert.ok(readme.includes(`installer/bootstrap.mjs ${c}`) || readme.includes(`bootstrap.mjs ${c}`) || c === 'plan', c);
 });
 
 test('standard commit is a verified full SHA from a clean Git checkout', () => {
-  assert.match(doc, /valid Git checkout/i);
-  assert.match(doc, /clean working tree/i);
-  assert.match(doc, /verifiable `HEAD`/);
-  assert.match(doc, /full\s+40-hex SHA/i);
-  assert.match(doc, /not a Git checkout, is dirty[\s\S]*fail closed[\s\S]*zero writes/i);
-  assert.match(doc, /never[\s\S]*synthetic value/i);
-  assert.match(doc, /Phase 2I-B design contract only/i);
+  assert.match(doc, /valid Git repository/i);
+  assert.match(doc, /clean\s+working tree/i);
+  assert.match(doc, /verifiable full 40-hex `HEAD`/);
+  assert.match(doc, /fail closed[\s\S]*zero writes/i);
+  assert.match(doc, /No synthetic or shortened commit/i);
+  assert.match(doc, /SOURCE_CHANGED/);
 });
 
-test('future CLI/verify/update are visibly proposed and not executable', () => {
-  for (const t of [readme, doc]) {
-    assert.match(t, /PROPOSED/);
-    assert.match(t, /NOT EXECUTABLE/);
-  }
-  for (const c of ['plan', 'apply', 'verify', 'update', 'uninstall']) {
-    const row = doc.split('\n').find((l) => l.startsWith(`| \`${c} `));
-    assert.ok(row, `row for ${c}`);
-    assert.match(row, /PROPOSED \/ NOT EXECUTABLE/);
-  }
+test('honest limitations are retained', () => {
+  for (const t of [readme, doc]) assert.match(t, /UNVERIFIED/);
+  assert.match(doc, /macOS (distribution )?gate/i);
+  assert.match(doc, /not part of Phase 2I-B/i);
+  assert.match(doc, /In-process journal only/);
 });
 
 test('no absolute machine paths', () => {
@@ -49,22 +48,21 @@ test('no absolute machine paths', () => {
   }
 });
 
-test('shared AGENTS.md ownership, ledger, macOS gate and UNVERIFIED are documented', () => {
-  assert.match(doc, /AGENTS\.md/);
+test('shared AGENTS.md ownership and ledger are documented', () => {
   assert.match(doc, /\.dac\/shared\.json/);
-  assert.match(doc, /shared ownership ledger/i);
-  assert.match(doc, /macOS (distribution )?gate/i);
-  assert.match(doc, /UNVERIFIED/);
+  assert.match(doc, /final owner/i);
+  assert.match(doc, /migration/i);
+  assert.match(doc, /A user-owned `AGENTS\.md` is a conflict/);
 });
 
-test('real provider CLIs are documented', () => {
+test('per-provider CLIs remain documented', () => {
   for (const p of ['claude-code', 'codex', 'cursor']) {
-    for (const c of ['plan', 'apply', 'uninstall']) {
-      assert.ok(doc.includes(`node adapters/${p}/cli.mjs ${c}`), `${p} ${c}`);
-    }
+    for (const c of ['plan', 'apply', 'uninstall']) assert.ok(doc.includes(`node adapters/${p}/cli.mjs ${c}`), `${p} ${c}`);
   }
 });
 
-test('README warns against Codex + Cursor coexistence', () => {
-  assert.match(readme, /do not apply Codex and Cursor to the same project today/i);
+test('Context7 off by default and no Spec Kit install are stated', () => {
+  assert.match(doc, /Context7 stays off by default/);
+  assert.match(doc, /Spec Kit is never installed/);
+  assert.match(readme, /Context7 is off by default/);
 });
