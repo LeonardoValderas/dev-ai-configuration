@@ -64,16 +64,18 @@ See [docs/security-principles.md](docs/security-principles.md).
 
 ## Quick Start (real commands only)
 
-Prerequisites (this repository installs none of them): Node 20+, git, and the tool for the
-provider adapter you choose:
+Prerequisites (this repository installs none of them): Node 20+, git, and the tool for each
+provider you choose:
 
-- `claude-code` adapter: Claude Code CLI.
-- `codex` adapter: Codex CLI.
-- `cursor` adapter: Cursor IDE and/or Cursor Agent CLI. These are distinct surfaces. The
+- `claude-code`: Claude Code CLI.
+- `codex`: Codex CLI.
+- `cursor`: Cursor IDE and/or Cursor Agent CLI. These are distinct surfaces. The
   adapter writes project files usable by both, but capability and enforcement evidence
   differs between them.
 
-1. Clone this repository on the new Mac, then run `npm test` and `npm run validate`:
+1. Clone this repository on the new Mac, check it out cleanly, then run `npm test` and
+   `npm run validate`. The bootstrap refuses to run from a checkout that is not a valid Git
+   repository, has uncommitted or untracked changes, or has an unverifiable `HEAD`.
 
 ```
 git clone https://github.com/LeonardoValderas/dev-ai-configuration.git
@@ -82,41 +84,46 @@ npm test
 npm run validate
 ```
 
-2. Pick **one** provider: `claude-code`, `codex` or `cursor`.
-3. Target: a new project (create the directory and `git init` first) or an existing project
-   directory. Existing files are never merged or overwritten; differing files cause a
+2. Target: a new or existing project directory (it may contain unrelated changes). Existing
+   files that are not managed by the bootstrap are never merged or overwritten; they cause a
    CONFLICT with zero writes.
-4. Dry-run first, then apply (replace `<provider>` and `<dir>`):
+3. Plan, then apply (replace `<dir>`; `--provider` is repeatable or comma-separated, so Codex
+   and Cursor can be installed together):
 
 ```
-node adapters/<provider>/cli.mjs plan
-node adapters/<provider>/cli.mjs apply --target <dir> --dry-run
-node adapters/<provider>/cli.mjs apply --target <dir>
+node installer/bootstrap.mjs plan --provider codex,cursor --target <dir>
+node installer/bootstrap.mjs apply --provider codex,cursor --target <dir>
 ```
 
-5. Verify today: re-run `apply --target <dir> --dry-run` (expect everything unchanged) and
-   inspect the managed manifest (`dac-manifest.json` under `.claude/`, `.codex/` or `.cursor/`).
-   There is no `verify` command.
-6. Start SDD: `cd` into the target project and launch your installed provider tool (see
+4. Verify at any time (no writes; reports missing, modified or invalid managed files):
+
+```
+node installer/bootstrap.mjs verify --target <dir>
+```
+
+5. Start SDD: `cd` into the target project and launch your installed provider tool (see
    [docs/project-bootstrap.md](docs/project-bootstrap.md#2a-provider-workflows)). Ask it to
    write the specification first under the canonical SDD in [docs/sdd.md](docs/sdd.md), and
    choose a mode (Full, Lightweight or Hotfix). Do not request implementation before the
    gates pass. Such a request is guidance only, not enforcement; the adapter does not execute
    SDD, and Spec Kit is not installed.
-7. Update today (manual): `git pull` here, then dry-run and apply again. Locally modified
-   managed files conflict.
-8. Rollback/uninstall: `node adapters/<provider>/cli.mjs uninstall --target <dir> --dry-run`,
-   then without `--dry-run`. Only unmodified managed files are removed.
+6. Update (explicit, never automatic): `git pull` here, then
+   `node installer/bootstrap.mjs update --target <dir>`. Locally modified managed files make the
+   update fail closed with zero writes.
+7. Uninstall one provider: `node installer/bootstrap.mjs uninstall --provider <p> --target <dir>`.
+   The shared `AGENTS.md` is kept while another provider still owns it.
 
-> **Warning: do not apply Codex and Cursor to the same project today.** Both emit a
-> provider-specific `AGENTS.md`, which conflicts, and uninstalling one can affect the other's
-> ownership. Shared ownership is only proposed in [docs/project-bootstrap.md](docs/project-bootstrap.md).
+Each project records the standard version and the full 40-hex source commit in
+`.dac/standard.json`, and the shared `AGENTS.md` ownership in `.dac/shared.json`. The per-provider
+commands under `adapters/<provider>/cli.mjs` still exist (single provider, legacy manifests).
+Use `installer/bootstrap.mjs` for new projects; it migrates a legacy Codex or Cursor install
+on `apply` or `update` only when its `AGENTS.md` is still the canonical, unmodified file.
 
-Known limitations: Context7 is off by default; authenticated enforcement is UNVERIFIED; Claude
-Code does not create `CLAUDE.md`. Cursor: the IDE and the Agent CLI are separate surfaces and
-enforcement is unverified for both; see [docs/codex-cursor-adapters.md](docs/codex-cursor-adapters.md).
-
-The future common CLI (`plan/apply/verify/update/uninstall`) is PROPOSED, NOT EXECUTABLE.
+Known limitations: Context7 is off by default (`--context7` is an explicit opt-in); authenticated
+enforcement is UNVERIFIED; Claude Code does not create `CLAUDE.md`. Cursor: the IDE and the Agent
+CLI are separate surfaces and enforcement is unverified for both; see
+[docs/codex-cursor-adapters.md](docs/codex-cursor-adapters.md). Transactions are in-process
+journaled rollbacks, not protection against a process kill mid-apply.
 
 ## Contracts, manifests and validators (Phase 2B)
 
@@ -133,13 +140,15 @@ The future common CLI (`plan/apply/verify/update/uninstall`) is PROPOSED, NOT EX
 See [docs/manifest-format.md](docs/manifest-format.md) and
 [docs/adding-components.md](docs/adding-components.md).
 
-## Current status: Phase 2I-A (design only)
+## Current status: Phase 2I-B (project bootstrap)
 
 _This section is the single canonical phase-state reference; other documents link here._
 
-Phase 2I-A is **design only**: see [docs/project-bootstrap.md](docs/project-bootstrap.md).
-A common bootstrap CLI, `verify` and `update` are **PROPOSED / NOT EXECUTABLE**; none of
-them is implemented. The Phase 2H adapters described below are the current implementation.
+Phase 2I-B implements the portable project bootstrap designed in
+[docs/project-bootstrap.md](docs/project-bootstrap.md): `installer/bootstrap.mjs` with `plan`,
+`apply`, `verify`, `update` and `uninstall`, built on the Phase 2H generators and the shared
+transactional installer. Provider enforcement of the generated read-only/deny settings remains
+**UNVERIFIED**, and the macOS provider-CLI gate is not part of this phase.
 
 Phase 2A scaffold plus the shared contracts, schemas and validators above, and
 (Phase 2C) the portable catalog of the 12 original agents (10 manifests:

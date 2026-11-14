@@ -30,14 +30,14 @@ personal values.
 
 ### 4. Installer (`installer/`)
 
-The mechanism that will eventually apply standards and adapters to a
-target machine or project. It currently contains only the read-only
-validator (`validate.mjs`); no installation logic is implemented.
-
-The project-scoped bootstrap facade proposed for Phase 2I-B, including
-version recording, conflict policy and shared ownership, is specified in
-[Project bootstrap design](project-bootstrap.md). That document is design
-only; it does not make the proposed common CLI executable.
+The read-only validator (`validate.mjs`) and the project-scoped bootstrap
+facade (`bootstrap.mjs`: `plan`, `apply`, `verify`, `update`, `uninstall`).
+The facade contains no installation engine of its own: it composes the
+provider generators and `createInstaller` planners under `adapters/` with the
+shared journaled executor, so one transaction covers every selected provider,
+the shared `AGENTS.md` ledger and the `.dac/` records. It requires a clean Git
+source with a verifiable `HEAD`. Behavior, ownership and limitations are in
+[Project bootstrap](project-bootstrap.md).
 
 ### 5. Compatibility (`compatibility/`)
 

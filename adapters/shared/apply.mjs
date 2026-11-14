@@ -8,14 +8,12 @@ import { homedir } from 'node:os';
 import { REPO_ROOT } from '../../installer/lib/run.mjs';
 import { sha256, AdapterError } from './canonical.mjs';
 
-export function createInstaller({ adapter, manifestPath: MANIFEST_PATH, verify = () => true, accepts = () => true }) {
-
 const inside = (base, target) => {
   const r = relative(base, target);
   return r === '' || (!r.startsWith('..' + sep) && r !== '..' && !isAbsolute(r));
 };
 
-function resolveTarget(target) {
+export function resolveTarget(target) {
   if (typeof target !== 'string' || target === '' || !isAbsolute(target)) throw new AdapterError('TARGET', 'target must be an absolute directory path');
   const abs = resolve(target);
   let st;
@@ -29,7 +27,7 @@ function resolveTarget(target) {
   return real;
 }
 
-function inspect(target, rel) {
+export function inspect(target, rel) {
   // returns { kind: 'missing' | 'file' | 'other', buf?, reason? }; rejects symlinks on the path.
   let cur = target;
   const parts = rel.split('/');
@@ -44,6 +42,71 @@ function inspect(target, rel) {
   }
   return { kind: 'missing' };
 }
+
+function writeAtomic(abs, buf) {
+  const tmp = `${abs}.dac-tmp-${process.pid}`;
+  writeFileSync(tmp, buf, { flag: 'wx', mode: 0o644 });
+  renameSync(tmp, abs);
+}
+
+// Journaled executor shared by every installer and by the project bootstrap facade.
+// changes: [{ op: 'create'|'update'|'remove', path, buf?, previous? }]. Before touching a path the
+// on-disk state is re-checked against what was planned; any difference aborts and rolls back.
+// faultAfter: test-only fault injection (throw after N mutations) to exercise rollback.
+// pruneDirs: remove directories left empty by removals (restored on rollback).
+export function executeActions(root, changes, { faultAfter = null, pruneDirs = false } = {}) {
+  const journal = []; // undo entries, applied in reverse
+  const createdDirs = [];
+  const prunedDirs = [];
+  let n = 0;
+  try {
+    for (const a of changes) {
+      const abs = join(root, ...a.path.split('/'));
+      const cur = inspect(root, a.path);
+      if (a.op === 'create' ? cur.kind !== 'missing' : (cur.kind !== 'file' || !cur.buf.equals(a.previous))) throw new Error(`target changed during apply: ${a.path}`);
+      if (a.op === 'remove') {
+        unlinkSync(abs);
+        journal.push({ abs, previous: a.previous });
+      } else {
+        const missing = [];
+        for (let d = dirname(abs); d !== root;) { // collect dirs to create
+          try { lstatSync(d); break; } catch { missing.push(d); d = dirname(d); }
+        }
+        for (const d of missing.reverse()) { mkdirSync(d); createdDirs.push(d); }
+        journal.push({ abs, previous: a.op === 'update' ? a.previous : null });
+        writeAtomic(abs, a.buf);
+      }
+      n++;
+      if (faultAfter !== null && n >= faultAfter) throw new Error('injected fault');
+    }
+    if (pruneDirs) {
+      const dirs = new Set();
+      for (const a of changes) if (a.op === 'remove') for (let d = dirname(a.path); d !== '.'; d = dirname(d)) dirs.add(d);
+      for (const d of [...dirs].sort((x, y) => y.length - x.length)) {
+        const abs = join(root, ...d.split('/'));
+        try { if (readdirSync(abs).length === 0) { rmdirSync(abs); prunedDirs.push(abs); } } catch { /* keep */ }
+      }
+    }
+  } catch (e) {
+    rollbackJournal(journal, createdDirs, prunedDirs);
+    const err = new AdapterError('APPLY_FAILED', 'apply failed and was rolled back; no partial state remains');
+    err.rolledBack = true;
+    err.cause = e;
+    throw err;
+  }
+}
+
+function rollbackJournal(journal, createdDirs, prunedDirs = []) {
+  for (const d of [...prunedDirs].reverse()) { try { mkdirSync(d); } catch { /* exists */ } }
+  for (const j of [...journal].reverse()) {
+    try { if (j.previous === null) unlinkSync(j.abs); else writeFileSync(j.abs, j.previous); } catch { /* best effort per entry */ }
+  }
+  for (const d of [...createdDirs].reverse()) { try { rmdirSync(d); } catch { /* not empty or gone */ } }
+}
+
+const pick = (actions, op) => actions.filter((a) => a.op === op).map((a) => a.path);
+
+export function createInstaller({ adapter, manifestPath: MANIFEST_PATH, verify = () => true, accepts = () => true }) {
 
 function readManifest(target) {
   const cur = inspect(target, MANIFEST_PATH);
@@ -88,12 +151,6 @@ function planActions(target, plan) {
   return { actions, conflicts };
 }
 
-function writeAtomic(abs, buf) {
-  const tmp = `${abs}.dac-tmp-${process.pid}`;
-  writeFileSync(tmp, buf, { flag: 'wx', mode: 0o644 });
-  renameSync(tmp, abs);
-}
-
 // faultAfter: test-only fault injection (throw after N mutations) to exercise rollback.
 function apply(target, plan, { dryRun = false, faultAfter = null } = {}) {
   const root = resolveTarget(target);
@@ -103,45 +160,8 @@ function apply(target, plan, { dryRun = false, faultAfter = null } = {}) {
   const changes = actions.filter((a) => a.op !== 'unchanged');
   if (changes.length === 0) return summary('UNCHANGED');
   if (dryRun) return summary('DRY_RUN');
-
-  const journal = []; // undo entries, applied in reverse
-  const createdDirs = [];
-  let n = 0;
-  try {
-    for (const a of changes) {
-      const abs = join(root, ...a.path.split('/'));
-      if (a.op === 'remove') {
-        unlinkSync(abs);
-        journal.push({ abs, previous: a.previous });
-      } else {
-        const missing = [];
-        for (let d = dirname(abs); d !== root;) { // collect dirs to create
-          try { lstatSync(d); break; } catch { missing.push(d); d = dirname(d); }
-        }
-        for (const d of missing.reverse()) { mkdirSync(d); createdDirs.push(d); }
-        journal.push({ abs, previous: a.op === 'update' ? a.previous : null });
-        writeAtomic(abs, a.buf);
-      }
-      n++;
-      if (faultAfter !== null && n >= faultAfter) throw new Error('injected fault');
-    }
-  } catch (e) {
-    rollbackJournal(journal, createdDirs);
-    const err = new AdapterError('APPLY_FAILED', 'apply failed and was rolled back; no partial state remains');
-    err.rolledBack = true;
-    err.cause = e;
-    throw err;
-  }
+  executeActions(root, changes, { faultAfter });
   return summary('APPLIED');
-}
-
-const pick = (actions, op) => actions.filter((a) => a.op === op).map((a) => a.path);
-
-function rollbackJournal(journal, createdDirs) {
-  for (const j of journal.reverse()) {
-    try { if (j.previous === null) unlinkSync(j.abs); else writeFileSync(j.abs, j.previous); } catch { /* best effort per entry */ }
-  }
-  for (const d of createdDirs.reverse()) { try { rmdirSync(d); } catch { /* not empty or gone */ } }
 }
 
 // Removes only files this adapter installed and that are unmodified; keeps everything else.
@@ -170,6 +190,6 @@ function uninstall(target, { dryRun = false } = {}) {
   return { status: removed.length ? (dryRun ? 'DRY_RUN' : 'REMOVED') : 'UNCHANGED', conflicts: [], removed, kept };
 }
 
-return { apply, uninstall, planActions, resolveTarget };
+return { apply, uninstall, planActions, resolveTarget, readManifest };
 }
 function safePath(p) { return typeof p === 'string' && p.length > 0 && !/[\\:\x00-\x1f]/.test(p) && !p.startsWith('/') && p.split('/').every((s) => s && s !== '.' && s !== '..'); }
