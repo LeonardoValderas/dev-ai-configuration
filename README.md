@@ -62,6 +62,62 @@ explicitly excluded from all of the above — see
 
 See [docs/security-principles.md](docs/security-principles.md).
 
+## Quick Start (real commands only)
+
+Prerequisites (this repository installs none of them): Node 20+, git, and the tool for the
+provider adapter you choose:
+
+- `claude-code` adapter: Claude Code CLI.
+- `codex` adapter: Codex CLI.
+- `cursor` adapter: Cursor IDE and/or Cursor Agent CLI. These are distinct surfaces. The
+  adapter writes project files usable by both, but capability and enforcement evidence
+  differs between them.
+
+1. Clone this repository on the new Mac, then run `npm test` and `npm run validate`:
+
+```
+git clone https://github.com/LeonardoValderas/dev-ai-configuration.git
+cd dev-ai-configuration
+npm test
+npm run validate
+```
+
+2. Pick **one** provider: `claude-code`, `codex` or `cursor`.
+3. Target: a new project (create the directory and `git init` first) or an existing project
+   directory. Existing files are never merged or overwritten; differing files cause a
+   CONFLICT with zero writes.
+4. Dry-run first, then apply (replace `<provider>` and `<dir>`):
+
+```
+node adapters/<provider>/cli.mjs plan
+node adapters/<provider>/cli.mjs apply --target <dir> --dry-run
+node adapters/<provider>/cli.mjs apply --target <dir>
+```
+
+5. Verify today: re-run `apply --target <dir> --dry-run` (expect everything unchanged) and
+   inspect the managed manifest (`dac-manifest.json` under `.claude/`, `.codex/` or `.cursor/`).
+   There is no `verify` command.
+6. Start SDD: `cd` into the target project and launch your installed provider tool (see
+   [docs/project-bootstrap.md](docs/project-bootstrap.md#2a-provider-workflows)). Ask it to
+   write the specification first under the canonical SDD in [docs/sdd.md](docs/sdd.md), and
+   choose a mode (Full, Lightweight or Hotfix). Do not request implementation before the
+   gates pass. Such a request is guidance only, not enforcement; the adapter does not execute
+   SDD, and Spec Kit is not installed.
+7. Update today (manual): `git pull` here, then dry-run and apply again. Locally modified
+   managed files conflict.
+8. Rollback/uninstall: `node adapters/<provider>/cli.mjs uninstall --target <dir> --dry-run`,
+   then without `--dry-run`. Only unmodified managed files are removed.
+
+> **Warning: do not apply Codex and Cursor to the same project today.** Both emit a
+> provider-specific `AGENTS.md`, which conflicts, and uninstalling one can affect the other's
+> ownership. Shared ownership is only proposed in [docs/project-bootstrap.md](docs/project-bootstrap.md).
+
+Known limitations: Context7 is off by default; authenticated enforcement is UNVERIFIED; Claude
+Code does not create `CLAUDE.md`. Cursor: the IDE and the Agent CLI are separate surfaces and
+enforcement is unverified for both; see [docs/codex-cursor-adapters.md](docs/codex-cursor-adapters.md).
+
+The future common CLI (`plan/apply/verify/update/uninstall`) is PROPOSED, NOT EXECUTABLE.
+
 ## Contracts, manifests and validators (Phase 2B)
 
 - `standards/schemas/` — JSON Schema (draft 2020-12) for the task contract,
@@ -77,9 +133,13 @@ See [docs/security-principles.md](docs/security-principles.md).
 See [docs/manifest-format.md](docs/manifest-format.md) and
 [docs/adding-components.md](docs/adding-components.md).
 
-## Current status: Phase 2H
+## Current status: Phase 2I-A (design only)
 
 _This section is the single canonical phase-state reference; other documents link here._
+
+Phase 2I-A is **design only**: see [docs/project-bootstrap.md](docs/project-bootstrap.md).
+A common bootstrap CLI, `verify` and `update` are **PROPOSED / NOT EXECUTABLE**; none of
+them is implemented. The Phase 2H adapters described below are the current implementation.
 
 Phase 2A scaffold plus the shared contracts, schemas and validators above, and
 (Phase 2C) the portable catalog of the 12 original agents (10 manifests:

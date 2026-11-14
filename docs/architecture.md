@@ -34,6 +34,11 @@ The mechanism that will eventually apply standards and adapters to a
 target machine or project. It currently contains only the read-only
 validator (`validate.mjs`); no installation logic is implemented.
 
+The project-scoped bootstrap facade proposed for Phase 2I-B, including
+version recording, conflict policy and shared ownership, is specified in
+[Project bootstrap design](project-bootstrap.md). That document is design
+only; it does not make the proposed common CLI executable.
+
 ### 5. Compatibility (`compatibility/`)
 
 Notes and (eventually) checks describing which versions of which tools
