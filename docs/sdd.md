@@ -129,3 +129,5 @@ confirm them, and any integration-specific agent directories, against the
 pinned release before the first approved install. A future installer must be an
 adapter (`uv-tool`); the manifest contains no executable steps. Adoption
 procedure: [sdd-adoption.md](sdd-adoption.md).
+
+Persisting SDD artifacts to a project: see [sdd-artifact-writer.md](sdd-artifact-writer.md). The planned `sdd-artifact-write` gate would be additional to the gates above and never a substitute for `pre-implementation`; the agent map is unchanged and `code-reviewer` stays read-only.

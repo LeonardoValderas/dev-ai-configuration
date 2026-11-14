@@ -180,3 +180,7 @@ default; no machine paths or OpenClaw references; no Spec Kit install.
 - `apply` does not downgrade silently: a different recorded commit requires `update`, which also allows moving to an older commit. Ancestry of commits is not checked.
 - Cursor IDE vs Agent CLI behavior differs; enforcement is unverified for both.
 - Provider native support for `AGENTS.md` may change.
+
+## 12. Related
+
+Project-owned SDD artifact storage is separate from bootstrap-owned files: [sdd-artifact-writer.md](sdd-artifact-writer.md). Bootstrap `apply`, `update`, `uninstall` and rollback preserve `.sdd/` byte for byte; bootstrap owns `.dac/` exclusively and the artifact writer never touches `.dac/`.
