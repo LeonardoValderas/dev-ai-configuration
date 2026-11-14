@@ -3,31 +3,119 @@
   "$id": "https://dev-ai-configuration.invalid/schemas/adapter-manifest.schema.json",
   "title": "Adapter manifest (references components by id only)",
   "type": "object",
-  "required": ["kind", "schema_version", "id", "version", "name", "description", "compatibility", "target_tool", "output_dir", "supports"],
+  "required": [
+    "kind",
+    "schema_version",
+    "id",
+    "version",
+    "name",
+    "description",
+    "compatibility",
+    "target_tool",
+    "output_dir",
+    "supports"
+  ],
   "additionalProperties": false,
   "properties": {
-    "kind": { "const": "adapter" },
-    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
-    "id": { "$ref": "common.schema.json#/$defs/id" },
-    "version": { "$ref": "common.schema.json#/$defs/semver" },
-    "name": { "$ref": "common.schema.json#/$defs/text" },
-    "description": { "$ref": "common.schema.json#/$defs/text" },
-    "compatibility": { "$ref": "common.schema.json#/$defs/compatibility" },
-    "target_tool": { "$ref": "common.schema.json#/$defs/id" },
+    "kind": {
+      "const": "adapter"
+    },
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "version": {
+      "$ref": "common.schema.json#/$defs/semver"
+    },
+    "name": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "description": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "compatibility": {
+      "$ref": "common.schema.json#/$defs/compatibility"
+    },
+    "target_tool": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
     "tool_versions": {
       "type": "object",
       "additionalProperties": false,
-      "properties": { "min": { "$ref": "common.schema.json#/$defs/semver" }, "max": { "$ref": "common.schema.json#/$defs/semver" } }
+      "properties": {
+        "min": {
+          "$ref": "common.schema.json#/$defs/semver"
+        },
+        "max": {
+          "$ref": "common.schema.json#/$defs/semver"
+        }
+      }
     },
-    "output_dir": { "$ref": "common.schema.json#/$defs/path" },
+    "output_dir": {
+      "$ref": "common.schema.json#/$defs/path"
+    },
     "supports": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "agents": { "$ref": "common.schema.json#/$defs/idList" },
-        "skills": { "$ref": "common.schema.json#/$defs/idList" },
-        "mcp_servers": { "$ref": "common.schema.json#/$defs/idList" },
-        "technology_profiles": { "$ref": "common.schema.json#/$defs/idList" }
+        "agents": {
+          "$ref": "common.schema.json#/$defs/idList"
+        },
+        "skills": {
+          "$ref": "common.schema.json#/$defs/idList"
+        },
+        "mcp_servers": {
+          "$ref": "common.schema.json#/$defs/idList"
+        },
+        "technology_profiles": {
+          "$ref": "common.schema.json#/$defs/idList"
+        }
+      }
+    },
+    "runtime_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declarative",
+        "cli_integration",
+        "authenticated_enforcement",
+        "verified_versions"
+      ],
+      "properties": {
+        "declarative": {
+          "enum": [
+            "tested",
+            "untested"
+          ]
+        },
+        "cli_integration": {
+          "enum": [
+            "conditional",
+            "untested"
+          ]
+        },
+        "authenticated_enforcement": {
+          "const": "unverified"
+        },
+        "verified_versions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cli"
+          ],
+          "properties": {
+            "cli": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ide": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
       }
     }
   }

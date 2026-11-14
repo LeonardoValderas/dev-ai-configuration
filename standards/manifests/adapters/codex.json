@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "kind": "adapter",
+  "id": "codex",
+  "version": "0.1.0",
+  "name": "codex project adapter",
+  "description": "Portable canonical agents, CORE skills, contracts and SDD. Conservative read-only defaults; Context7 template only, disabled. No authenticated enforcement claim.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "target_tool": "codex",
+  "tool_versions": {
+    "min": "0.154.0"
+  },
+  "output_dir": ".codex",
+  "supports": {
+    "agents": [
+      "repo-analyst",
+      "technical-planner",
+      "prompt-engineer",
+      "site-analyst",
+      "frontend-expert",
+      "backend-expert",
+      "kmp-expert",
+      "e2e-tester",
+      "code-reviewer"
+    ]
+  },
+  "runtime_evidence": {
+    "declarative": "tested",
+    "cli_integration": "conditional",
+    "authenticated_enforcement": "unverified",
+    "verified_versions": {
+      "cli": "0.154.0"
+    }
+  }
+}
