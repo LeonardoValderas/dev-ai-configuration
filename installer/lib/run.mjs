@@ -192,6 +192,7 @@ export function validatePaths(inputs, { matrixPath, root = REPO_ROOT } = {}) {
         for (const v of doc.compatibility.standard) if (typeof v === 'string' && !matrix.supported_standard_versions.includes(v)) unsupported(file, '$.compatibility.standard', `standard version "${v}" is not supported`);
       }
       if (doc.kind === 'adapter' && typeof doc.target_tool === 'string' && !matrix.supported_tools.includes(doc.target_tool)) unsupported(file, '$.target_tool', `target_tool "${doc.target_tool}" is not supported`);
+      if (doc.kind === 'adapter') for (const message of checkAdapterEvidence(doc, matrix)) unsupported(file, '$.runtime_evidence', message);
     }
   } else if (matrix) {
     errors.push({ code: 'SCHEMA_CONSTRAINT', file: matrixPath, path: '$', message: 'compatibility matrix does not satisfy its schema' });
@@ -296,4 +297,13 @@ function checkSkills({ valid, schemaFailed, skillCatalogs, root, errors }) {
       }
     }
   }
+}
+
+// Evidence is deliberately separate from feature support; help/version cannot prove enforcement.
+export function checkAdapterEvidence(doc, matrix) {
+  const expected = matrix.adapter_evidence?.[doc.target_tool];
+  if (!expected) return doc.runtime_evidence ? ['adapter evidence has no compatibility matrix entry'] : [];
+  const actual = doc.runtime_evidence;
+  if (!actual || ['declarative', 'cli_integration', 'authenticated_enforcement'].some((k) => actual[k] !== expected[k]) || ['cli', 'ide'].some((k) => actual.verified_versions?.[k] !== expected.verified_versions?.[k])) return ['adapter evidence differs from compatibility matrix'];
+  return [];
 }

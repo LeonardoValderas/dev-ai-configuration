@@ -135,3 +135,11 @@ Credential-shaped and machine-specific values are written as `@@TOKEN@@`
 placeholders and composed by the test at run time into a temporary copy, so
 the repository holds no such literals. Running the validator directly on raw
 fixtures therefore does not exercise those cases; use `npm test`.
+
+Phase 2H adapter manifests may also declare `runtime_evidence`: `declarative`
+(tested/untested), `cli_integration` (conditional/untested),
+`authenticated_enforcement` (must remain unverified), and `verified_versions`
+with a CLI version string and optional IDE version. CLI date/build identifiers
+are not SemVer; they are recorded separately from `tool_versions` (Cursor's IDE
+range). The validator checks agreement with `compatibility/matrix.json`.
+These are evidence categories, not a promise of equivalent provider enforcement.

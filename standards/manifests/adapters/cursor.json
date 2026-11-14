@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "kind": "adapter",
+  "id": "cursor",
+  "version": "0.1.0",
+  "name": "cursor project adapter",
+  "description": "Portable canonical agents, CORE skills, contracts and SDD. Conservative read-only defaults; Context7 template only, disabled. No authenticated enforcement claim.",
+  "compatibility": {
+    "standard": [
+      "1.0"
+    ]
+  },
+  "target_tool": "cursor",
+  "tool_versions": {
+    "min": "3.30.14"
+  },
+  "output_dir": ".cursor",
+  "supports": {
+    "agents": [
+      "repo-analyst",
+      "technical-planner",
+      "prompt-engineer",
+      "site-analyst",
+      "frontend-expert",
+      "backend-expert",
+      "kmp-expert",
+      "e2e-tester",
+      "code-reviewer"
+    ]
+  },
+  "runtime_evidence": {
+    "declarative": "tested",
+    "cli_integration": "conditional",
+    "authenticated_enforcement": "unverified",
+    "verified_versions": {
+      "cli": "2026.11.13-eacade1",
+      "ide": "3.30.14"
+    }
+  }
+}

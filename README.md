@@ -77,7 +77,7 @@ See [docs/security-principles.md](docs/security-principles.md).
 See [docs/manifest-format.md](docs/manifest-format.md) and
 [docs/adding-components.md](docs/adding-components.md).
 
-## Current status: Phase 2G
+## Current status: Phase 2H
 
 _This section is the single canonical phase-state reference; other documents link here._
 
@@ -114,7 +114,6 @@ included** and are planned for later phases:
 - Context7 installation and runtime connection (declaration and validation are delivered).
 - Executable MCP (Model Context Protocol) client/server configuration (declarations,
   policy validation and non-executable provider templates are delivered).
-- Adapters for tools other than Claude Code (Codex, Cursor).
 
 Phase 2G adds the portable Claude Code project adapter (`adapters/claude-code/`):
 it generates and safely applies project-scoped agents, the two CORE skills, SDD
@@ -128,3 +127,12 @@ Phase 2F adds an optional, disabled Context7 declaration and a sanitized,
 quarantined MCP reference inventory. See the [portable MCP catalog, policy,
 compatibility and adoption guide](docs/mcp-catalog.md). Provider templates are
 non-executable specifications for future installer work; no servers are enabled.
+
+Phase 2H adds native portable Codex and Cursor adapters. Both derive nine agents,
+the two CORE skills, Full/Lightweight/Hotfix SDD and task/result contracts from the
+canonical sources through shared renderers. They ship conservative read-only
+settings: implementation and shell actions are BLOCKED until native enforcement
+can preserve the canonical scope. Context7 remains disabled and disconnected.
+See [the Phase 2H usage, compatibility and evidence ledger](docs/codex-cursor-adapters.md).
+CLI help/version tests require proven macOS isolation; they never authenticate or
+call a model. A sandbox refusal is reported as unverified, never silently bypassed.
