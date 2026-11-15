@@ -76,7 +76,7 @@
     },
     {
       "path": ".claude/dac/sdd/sdd-workflow.json",
-      "sha256": "d504ac5ac2a2878c3e4c4b3780ebe662aadb5713506f2aa143cf250c7f17c78b"
+      "sha256": "8c599dee0239994dcec5039bc2dbbeeeec16ccc89c2dca16de6bcc8f86f58158"
     },
     {
       "path": ".claude/hooks/dac-scope-guard.mjs",
@@ -92,7 +92,7 @@
     },
     {
       "path": ".claude/rules/dac-sdd.md",
-      "sha256": "0fa1b3f63d749eaf828a5fbaaae9fa8b1a80b549e714f5f4faa4d9ece4a05f83"
+      "sha256": "7ad4f54fca608951f23e5cbafcedd36fa7c2bcbffe6ad4e007c03cc309325606"
     },
     {
       "path": ".claude/settings.json",

@@ -7,10 +7,11 @@ const read = (p) => readFileSync(new URL(p, root), 'utf8');
 const raw = read('docs/sdd-artifact-writer.md');
 const doc = raw.replace(/[ \t]*\n[ \t]*(?!\s)/g, (m) => (m.includes('\n\n') ? m : ' '));
 
-test('doc is labeled design only and states what is not present', () => {
-  assert.match(doc, /DESIGN ONLY \/ NOT IMPLEMENTED/);
-  assert.match(doc, /Phase 2J-B/);
-  for (const w of ['CLI', 'schemas', 'gate wiring']) assert.ok(doc.includes(w), w);
+test('doc states the implemented scope and where the pieces live', () => {
+  assert.doesNotMatch(doc, /DESIGN ONLY|NOT IMPLEMENTED/);
+  assert.match(doc, /Implemented \(Phase 2J-B\)/);
+  for (const w of ['adapters/shared/sdd-writer/writer.mjs', 'adapters/shared/sdd-writer/cli.mjs', 'sdd-constitution.schema.json', 'sdd-specify.schema.json', 'sdd-write-receipt.schema.json']) assert.ok(doc.includes(w), w);
+  for (const w of ['adapters/shared/sdd-writer/writer.mjs', 'adapters/shared/sdd-writer/cli.mjs', 'adapters/shared/sdd-writer/artifacts.mjs']) assert.ok(existsSync(new URL(w, root)), w);
 });
 
 test('doc covers the required design sections', () => {
@@ -26,7 +27,7 @@ test('doc covers the required design sections', () => {
     /executeActions/, /adapters\/shared\/apply\.mjs/, /second transaction engine/, /hard kill/, /advisory between cooperating writer processes/,
     /before_sha256/, /after_sha256/, /post-write disk verification/, /failure\s+evidence/,
     /must not populate/, /files_changed/,
-    /duplicate requirement/i, /orphan criteria/, /Acceptance criteria/, /test matrix/, /Open decisions and risks/,
+    /duplicate requirement/i, /orphan criteria/, /Acceptance criteria/, /[Tt]est matrix/, /Open decisions and risks/,
   ];
   for (const re of required) assert.match(doc, re, String(re));
 });
@@ -39,6 +40,7 @@ test('exact preservation boundaries: .sdd is project-owned, .dac is bootstrap-ow
   assert.match(doc, /never reads or writes `\.dac\/`/);
   // Implementation side: bootstrap and shared installer know nothing about .sdd.
   for (const f of ['installer/bootstrap.mjs', 'adapters/shared/apply.mjs']) assert.doesNotMatch(read(f), /\.sdd\b/, f);
+  assert.doesNotMatch(read('adapters/shared/sdd-writer/writer.mjs') + read('adapters/shared/sdd-writer/artifacts.mjs') + read('adapters/shared/sdd-writer/lock.mjs'), /['"`]\.dac\//);
   const boot = read('installer/bootstrap.mjs');
   assert.match(boot, /STANDARD_PATH = '\.dac\/standard\.json'/);
   assert.match(boot, /SHARED_PATH = '\.dac\/shared\.json'/);
@@ -60,7 +62,7 @@ test('closed decisions: storage, approval, TTL, lock, transaction, gate', () => 
     /optional\s+in-transaction verification callback/, /honest rollback-failure reporting/, /best effort/, /`\.dac-tmp`/,
     /full prior-state check under the lock/, /per-action/,
     /additional, never a substitute/, /code still requires a granted `pre-implementation`/,
-    /narrow it to\s+implementation, code, tests, scripts and configuration outside the exact SDD\s+documentation allowlist/,
+    /covers implementation, code,\s+tests, scripts and configuration outside the exact SDD allowlist|implementation, code,\s+tests, scripts and configuration outside the exact SDD documentation allowlist/,
     /Future gate wiring touch points/, /installer\/lib\/sdd\.mjs/,
     /Bootstrap `apply`, `update`, `uninstall` and rollback|Bootstrap `apply`, `update` and `uninstall` never/,
   ];
@@ -99,22 +101,18 @@ test('cross-links are present and minimal', () => {
   }
 });
 
-test('no executable writer, gate wiring or schema changes exist', () => {
-  for (const dir of ['installer', 'adapters', 'installer/lib', 'adapters/shared', 'standards/schemas', 'standards/sdd']) {
-    for (const f of readdirSync(new URL(`${dir}/`, root))) assert.doesNotMatch(f, /artifact-writer|artifact_writer/i, `${dir}/${f}`);
-  }
-  assert.ok(!existsSync(new URL('standards/schemas/sdd-artifact.schema.json', root)));
+test('gate wiring: sdd-artifact-write is separate and pre-implementation is narrowed', () => {
   const wf = JSON.parse(read('standards/sdd/sdd-workflow.json'));
-  assert.deepEqual(wf.gates.map((g) => g.id), ['pre-implementation', 'pre-migration', 'pre-production-mutation', 'pre-deployment', 'pass']);
-  for (const f of ['standards/sdd/sdd-workflow.json', 'standards/sdd/sdd-agent-map.json', 'standards/sdd/spec-kit-integration.json', 'standards/schemas/sdd-project.schema.json', 'installer/bootstrap.mjs', 'installer/lib/sdd.mjs', 'package.json']) {
-    assert.doesNotMatch(read(f), /sdd-artifact-write|artifact-writer/, f);
-  }
-  assert.match(wf.gates[0].blocks, /any file change/); // wording narrowing is 2J-B work
-  for (const f of ['adapters/shared/apply.mjs', 'adapters/shared/canonical.mjs', 'installer/lib/sdd.mjs']) {
-    assert.doesNotMatch(read(f), /verifyInTransaction|onVerify|\.sdd\/locks|sdd-artifact-write/, f);
-  }
-  const pkg = JSON.parse(read('package.json'));
-  assert.ok(!JSON.stringify(pkg.scripts ?? {}).includes('artifact'));
+  assert.deepEqual(wf.gates.map((g) => g.id), ['pre-implementation', 'sdd-artifact-write', 'pre-migration', 'pre-production-mutation', 'pre-deployment', 'pass']);
+  const w = wf.gates.find((g) => g.id === 'sdd-artifact-write');
+  assert.equal(w.requires_human_approval, true);
+  const pre = wf.gates.find((g) => g.id === 'pre-implementation');
+  assert.doesNotMatch(pre.blocks, /any file change/);
+  assert.match(pre.blocks, /outside the exact SDD documentation allowlist/);
+  for (const g of wf.gates) if (g.id !== 'sdd-artifact-write') for (const c of w.requires) assert.ok(!g.requires.includes(c), `${g.id} must not borrow ${c}`);
+  assert.ok(!pre.requires.some((c) => /artifact|terminal/.test(c)));
+  for (const f of ['standards/sdd/sdd-agent-map.json', 'standards/sdd/spec-kit-integration.json', 'installer/bootstrap.mjs']) assert.doesNotMatch(read(f), /sdd-artifact-write|sdd-writer/, f);
+  assert.equal(JSON.parse(read('package.json')).scripts['sdd-writer'], 'node adapters/shared/sdd-writer/cli.mjs');
 });
 
 test('sdd-project files_changed semantics are unchanged', () => {

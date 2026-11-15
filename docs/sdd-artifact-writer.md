@@ -1,17 +1,25 @@
 # SDD Artifact Writer
 
-> **DESIGN ONLY / NOT IMPLEMENTED.** This document specifies a future component
-> (Phase 2J-B). No writer, CLI, schema, or gate wiring exists in this repository.
-> Nothing here may be read as a description of current behavior. Phase 2J-A is
-> documentation and a static test only.
+> **Implemented (Phase 2J-B).** The writer, its CLI, the schemas and the
+> `sdd-artifact-write` gate exist in this repository. This document is the contract
+> they implement. It is provider-neutral: Claude Code, Codex and Cursor see the same
+> contract; there is no provider parameter anywhere.
 
-Status of the pieces that do **not** exist yet (all are future Phase 2J-B work):
+Where things live:
 
-- the writer module and its `plan` / `apply` / `verify` entry points;
-- any CLI;
-- the JSON schemas for artifacts, plans, authorizations and receipts;
-- the `sdd-artifact-write` gate in `standards/sdd/sdd-workflow.json`;
-- local human confirmation tooling and the lock implementation.
+- writer module and `plan` / `apply` / `verify` entry points:
+  `adapters/shared/sdd-writer/writer.mjs`;
+- CLI: `node adapters/shared/sdd-writer/cli.mjs <plan|apply|verify>` (also
+  `npm run sdd-writer -- ...`);
+- content and path policy: `adapters/shared/sdd-writer/artifacts.mjs`; authorization and
+  trusted terminal: `authorization.mjs`; lock: `lock.mjs`;
+- schemas: `standards/schemas/sdd-constitution.schema.json`,
+  `sdd-specify.schema.json`, `sdd-write-receipt.schema.json`;
+- gate: `sdd-artifact-write` in `standards/sdd/sdd-workflow.json`.
+
+Implemented scope: the **Constitution** and **Specify** artifacts (and their optional
+derived Markdown). `plan.json`, `tasks.json` and `traceability.json` are not writable
+yet: they are not on the allowlist, so the writer refuses them.
 
 Current SDD data and checks are described in [sdd.md](sdd.md). The bootstrap
 that installs provider files is [project-bootstrap.md](project-bootstrap.md).
@@ -20,7 +28,7 @@ that installs provider files is [project-bootstrap.md](project-bootstrap.md).
 
 SDD artifacts (Constitution, Specify output, plan, tasks, traceability) are today
 produced by agents as conversation content. The Artifact Writer is a deterministic,
-provider-neutral, transactional component that would persist **validated** SDD
+provider-neutral, transactional component that persists **validated** SDD
 documentation into a project, only after explicit local human authorization.
 
 Non-goals: it is not a general workspace writer; it never writes code, tests,
@@ -89,6 +97,19 @@ previously returned plan object.
 receipt: hashes, schema validity, referential integrity, derived Markdown, receipt
 chain. Reports drift; never repairs.
 
+**Input and flow.** `--input` is a JSON file (never stdin) with `project_id`,
+`operation` (`create` | `update`), optional `markdown` (boolean, default `false`) and
+one or both of `constitution` and `specify`
+(see the two schemas). `apply` has no authorization argument: after the lock is held and
+the plan recomputed, the writer mints the authorization (nonce, `issued_at`,
+`expires_at = issued_at + 600 s`), opens `/dev/tty` itself, prints the exact plan and
+digest, and requires the human to type `approve <digest prefix> <nonce prefix>`. Any
+other answer, or no terminal, is a refusal with zero writes. `--recover-lock` only
+offers stale-lock recovery (section 7). Unknown options, including `--yes`, are usage
+errors. The operational result lists `files_changed` exactly (artifacts that changed,
+the receipt and the consumed marker; empty on failure unless a rollback failed, in
+which case it lists the paths that could not be restored).
+
 ## 4. Human authorization
 
 A bare SHA or digest is insufficient: a digest proves integrity, not consent. An
@@ -119,6 +140,25 @@ Decisions (closed):
    600 s. A future `issued_at` is tolerated by at most 30 seconds of clock skew;
    skew never extends `expires_at`. Time is checked after the lock is acquired and
    again immediately before the first write. Exactly at `expires_at` is expired.
+   The interactive confirmation has its own timeout: `min(configured confirmation
+   timeout (default 120 s), time remaining until expires_at)`; the 30 s skew
+   tolerance is never added to it. If nothing is confirmed in time (or no time is
+   left) the writer fails with `APPROVAL_TIMEOUT`: zero artifact writes, the nonce is
+   not consumed (no consumed marker), the terminal it opened is closed and only the
+   lock it owns (token match) is released.
+   The terminal polls non-blockingly every 25 ms, so a timeout is detected within
+   about 25 ms (plus scheduling) after the deadline; a confirmation line completed
+   after the deadline is rejected even if the human was mid-typing. Real-PTY tests
+   (`22`, `22b`, `22c`, including slow input near `expires_at` proving zero writes
+   and no consumed nonce) need python3 with `pty`; without it they are an explicit
+   Node SKIP in `npm test`. The macOS gate `npm run test:pty-gate` sets
+   `DAC_REQUIRE_PTY=1` and BLOCKS (exit 1) if they cannot run or any is skipped.
+   **CI disclosure:** `npm run test:pty-gate` is NOT wired into the current GitHub
+   Actions workflow. Current CI runs on Ubuntu, where ordinary tests may explicitly
+   SKIP the PTY tests when python3/pty is unavailable. Until a macOS CI job exists,
+   running `npm run test:pty-gate` on macOS is a manual, mandatory operator gate
+   before merge/release. If that gate cannot execute all expected PTY tests, the
+   status is BLOCKED.
 4. **Recompute and revalidate** the plan, prior state (full check under lock) and
    standard commit immediately before writing. Any difference fails closed.
 5. **Expired, altered or replayed** authorization fails with **zero writes**. Replay
@@ -155,8 +195,9 @@ model text cannot inject structure outside its fields.
 
 ## 6. The `sdd-artifact-write` gate
 
-A new gate, separate from `pre-implementation`, to be added in Phase 2J-B (it is
-not present in `sdd-workflow.json`):
+A gate separate from `pre-implementation`, defined in `sdd-workflow.json` and applied by
+every mode (conditions: `artifacts-validated`, `path-allowlist-confined`,
+`plan-digest-bound`, `trusted-terminal-approval`; no other gate may borrow them):
 
 - It permits exactly one thing: persistence of managed SDD documentation through
   the writer.
@@ -168,14 +209,15 @@ not present in `sdd-workflow.json`):
   a receipt but cannot hold or exercise the write authorization.
 - It requires human approval (section 4).
 
-Required 2J-B wording change (not made now): the `pre-implementation` "blocks"
-text currently reads "the implement phase and any file change"
-(`standards/sdd/sdd-workflow.json`, `docs/sdd.md`). 2J-B must narrow it to
-implementation, code, tests, scripts and configuration outside the exact SDD
-documentation allowlist. Files inside that allowlist are governed by
-`sdd-artifact-write`.
+Wording change made in 2J-B: the `pre-implementation` "blocks" text used to read "the
+implement phase and any file change". It now says it covers implementation, code,
+tests, scripts and configuration outside the exact SDD documentation allowlist; files
+inside that allowlist are governed by `sdd-artifact-write`. Approving documentation
+therefore never authorizes code changes, and `checkWorkflow` rejects the old wording.
 
-Future gate wiring touch points (listed only; none is changed in 2J-A):
+Future gate wiring touch points (wired in 2J-B unless noted; the agent map and the
+`dac-scope-guard` hook scope are intentionally unchanged because the writer is not an
+agent and no agent gains Write/Edit):
 `standards/sdd/sdd-workflow.json` (gate and wording), `standards/schemas/` (gate
 and artifact/plan/authorization/receipt schemas), `standards/sdd/sdd-agent-map.json`,
 `installer/lib/sdd.mjs` (hardcoded five-gate set and approval rules),
@@ -184,8 +226,7 @@ and artifact/plan/authorization/receipt schemas), `standards/sdd/sdd-agent-map.j
 
 ## 7. Transaction, locking and reuse
 
-Do not build a second transaction engine. Chosen design for 2J-B (design only, no
-executable change now): a thin writer **outside `installer/`** (guarded as
+There is no second transaction engine. Implemented design: a thin writer **outside `installer/`** (guarded as
 read-only/no-write by validators) computes the actions and calls the shared
 `executeActions` from `adapters/shared/apply.mjs`, **extended with an optional
 in-transaction verification callback** and **honest rollback-failure reporting**
@@ -218,6 +259,15 @@ Known limits inherited from the shared executor, to be restated in 2J-B:
   automatically; `verify` must detect both (missing receipt, hash mismatch,
   `.dac-tmp` leftovers) and report, not repair;
 - rollback is **best effort**: a restore can itself fail, and the result must say so;
+- owner verification is strict and fail-safe. Liveness uses `ps -o lstart= -p <pid>`
+  (POSIX `ps` as on macOS and Linux procps) compared with the start time recorded in
+  the lock. The same probe is first run on the writer's own pid; if it does not
+  work (no `ps`, unsupported option, busybox/restricted environments, Windows) or
+  the lock has no recorded start time, the owner is `unverifiable` and recovery is
+  refused. Same-host only, never by age, and `lstart` has one-second resolution (a
+  recycled pid started within the same second as the original is indistinguishable;
+  the terminal confirmation is the remaining safeguard). On such platforms a stale
+  lock must be removed manually by a human after inspection;
 - the lock is advisory between cooperating writer processes; a non-cooperating
   process can still modify files, mitigated only by the prior-state rechecks;
 - records are not signed.
@@ -281,7 +331,7 @@ scope). Artifact paths are not implementation changes.
     `pre-implementation` wording is narrowed as described in section 6.
 15. Fails closed without a trustworthy human channel; `code-reviewer` stays read-only.
 
-## 11. Future test matrix (not present)
+## 11. Test matrix (`tests/sdd-artifact-writer.test.mjs`)
 
 Valid and invalid Constitution; valid and invalid Specify; duplicate requirements;
 orphan criteria; absolute path, traversal, symlink (file and directory), case and
@@ -302,11 +352,12 @@ receipt integrity and chain; zero writes on every failure; gate separation from
 Real unresolved items only (everything in sections 2 to 7 is decided):
 
 - Behavior of the trusted terminal on Windows consoles.
-- Receipt sequencing and the exact hard-kill recovery procedure beyond detection.
+- Receipt sequencing and the exact hard-kill recovery procedure beyond detection
+  (after lock recovery the writer only verifies; it never repairs).
 - Whether the consumed marker store is bounded or pruned (pruning would weaken replay
   detection).
-- Schema versioning of artifacts and receipts, and how the gate is added to
-  `sdd-workflow.json` without breaking existing validators.
+- Schema versioning beyond `1.0` of artifacts and receipts; `plan`, `tasks` and
+  `traceability` artifacts are not yet writable.
 - Risk: a same-user process can imitate a TTY; local confirmation raises the bar but
   is not a security boundary against a hostile local user.
 - Risk: inherited hard-kill, temp-file and best-effort rollback limits (section 7).

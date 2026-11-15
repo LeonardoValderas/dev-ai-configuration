@@ -10,14 +10,14 @@ Methodology only: nothing here installs or runs an external SDD toolkit. Records
 - Use when: New products, new capabilities, cross-cutting or high-risk work, anything touching data models, security or multiple components, or work whose requirements are not yet understood.
 - Required phases: constitution, specify, clarify, plan, checklist, tasks, analyze, implement, converge, independent-validation
 - Skippable phases: none
-- Gates: pre-implementation, pre-migration, pre-production-mutation, pre-deployment, pass
+- Gates: sdd-artifact-write, pre-implementation, pre-migration, pre-production-mutation, pre-deployment, pass
 
 ### lightweight
 
 - Use when: Well-understood, bounded changes in an existing project that already has a constitution and an established approach, with a small number of tasks.
 - Required phases: specify, plan, tasks, implement, independent-validation
 - Skippable phases: constitution, clarify, checklist, analyze, converge
-- Gates: pre-implementation, pre-migration, pre-production-mutation, pre-deployment, pass
+- Gates: sdd-artifact-write, pre-implementation, pre-migration, pre-production-mutation, pre-deployment, pass
 - Max tasks: 10
 
 ### hotfix
@@ -25,7 +25,7 @@ Methodology only: nothing here installs or runs an external SDD toolkit. Records
 - Use when: Urgent, narrowly scoped correction of a defect in existing behavior. Never for migrations, production schema changes or new capabilities. Urgency never waives approval or independent validation.
 - Required phases: specify, tasks, implement, independent-validation
 - Skippable phases: constitution, clarify, plan, checklist, analyze, converge
-- Gates: pre-implementation, pre-migration, pre-production-mutation, pre-deployment, pass
+- Gates: sdd-artifact-write, pre-implementation, pre-migration, pre-production-mutation, pre-deployment, pass
 - Max tasks: 3
 - Never for: migration, production-schema
 
@@ -44,7 +44,8 @@ Methodology only: nothing here installs or runs an external SDD toolkit. Records
 
 ## Gates
 
-- pre-implementation: blocks The implement phase and any file change. Requires human approval. Requires: requirements-complete, tasks-have-criteria, traceability-complete, required-phases-complete, scope-confined.
+- pre-implementation: blocks The implement phase and any implementation, code, test, script or configuration change outside the exact SDD documentation allowlist (files inside that allowlist are governed by sdd-artifact-write). Requires human approval. Requires: requirements-complete, tasks-have-criteria, traceability-complete, required-phases-complete, scope-confined.
+- sdd-artifact-write: blocks Persisting managed SDD documentation (Constitution, Specify) under the project-owned .sdd/ allowlist through the SDD Artifact Writer. Additional to, never a substitute for, pre-implementation and every other gate. Requires human approval. Requires: artifacts-validated, path-allowlist-confined, plan-digest-bound, trusted-terminal-approval.
 - pre-migration: blocks Any database or data migration, including its authoring in a runnable form. Requires human approval. Requires: pre-implementation-passed, rollback-plan-recorded.
 - pre-production-mutation: blocks Any change to production data, production schema or production configuration. Requires human approval. Requires: pre-implementation-passed, rollback-plan-recorded.
 - pre-deployment: blocks Any deployment or release. Requires human approval. Requires: pre-implementation-passed, independent-validation.
