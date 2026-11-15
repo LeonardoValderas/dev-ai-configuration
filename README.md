@@ -164,7 +164,7 @@ modes, blocking gates, artifact contracts, an agent-to-phase map (all 8 primary
 agents plus the independent `code-reviewer`), and a declarative, **not
 installed, untested and not executable** integration manifest pinned to GitHub
 Spec Kit v1.4.0. See [docs/sdd.md](docs/sdd.md) and
-[docs/sdd-adoption.md](docs/sdd-adoption.md). Spec Kit is neither installed, run
+[docs/sdd-adoption.md](docs/sdd-adoption.md); artifact persistence: [docs/sdd-artifact-writer.md](docs/sdd-artifact-writer.md). Spec Kit is neither installed, run
 nor copied by this repository; no provider compatibility is claimed.
 
 **Third-party skill provenance and license.** The CORE skill

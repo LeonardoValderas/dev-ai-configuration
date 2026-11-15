@@ -76,3 +76,5 @@ reference such infrastructure.
 The canonical phase state lives in one place only: the
 [README](../README.md#current-status-phase-2e). This document describes the
 layer structure and boundaries, which do not change between phases.
+
+See also: [SDD Artifact Writer](sdd-artifact-writer.md).
