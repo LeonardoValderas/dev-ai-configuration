@@ -54,7 +54,8 @@ Every mode applies every gate. Gates marked † need a granted approval by a hum
 
 | Gate | Blocks | Key conditions |
 |---|---|---|
-| `pre-implementation` † | the implement phase and any file change | requirements complete, no open questions, tasks have criteria, traceability complete, mode's required earlier phases completed, scope confined |
+| `sdd-artifact-write` † | persisting managed SDD documentation (Constitution, Specify) under the project-owned `.sdd/` allowlist | artifacts validated, path allowlist confined, plan digest bound, approval on a trusted terminal opened by the writer |
+| `pre-implementation` † | the implement phase and any implementation, code, test, script or configuration change outside the `.sdd/` documentation allowlist | requirements complete, no open questions, tasks have criteria, traceability complete, mode's required earlier phases completed, scope confined |
 | `pre-migration` † | database or data migrations | pre-implementation passed, rollback plan (a risk with mitigation linked to the task) |
 | `pre-production-mutation` † | production data, schema or configuration changes | same as migration |
 | `pre-deployment` † | deployment or release | pre-implementation passed, independent PASS |
@@ -130,4 +131,4 @@ pinned release before the first approved install. A future installer must be an
 adapter (`uv-tool`); the manifest contains no executable steps. Adoption
 procedure: [sdd-adoption.md](sdd-adoption.md).
 
-Persisting SDD artifacts to a project: see [sdd-artifact-writer.md](sdd-artifact-writer.md). The planned `sdd-artifact-write` gate would be additional to the gates above and never a substitute for `pre-implementation`; the agent map is unchanged and `code-reviewer` stays read-only.
+Persisting SDD artifacts to a project: see [sdd-artifact-writer.md](sdd-artifact-writer.md). The `sdd-artifact-write` gate is additional to the other gates and never a substitute for `pre-implementation` (documentation approval does not authorize code changes); the agent map is unchanged and `code-reviewer` stays read-only.

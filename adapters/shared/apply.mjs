@@ -45,8 +45,13 @@ export function inspect(target, rel) {
 
 function writeAtomic(abs, buf) {
   const tmp = `${abs}.dac-tmp-${process.pid}`;
-  writeFileSync(tmp, buf, { flag: 'wx', mode: 0o644 });
-  renameSync(tmp, abs);
+  try {
+    writeFileSync(tmp, buf, { flag: 'wx', mode: 0o644 });
+    renameSync(tmp, abs);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch { /* temp file was never created or is already gone */ }
+    throw e;
+  }
 }
 
 // Journaled executor shared by every installer and by the project bootstrap facade.
@@ -54,7 +59,10 @@ function writeAtomic(abs, buf) {
 // on-disk state is re-checked against what was planned; any difference aborts and rolls back.
 // faultAfter: test-only fault injection (throw after N mutations) to exercise rollback.
 // pruneDirs: remove directories left empty by removals (restored on rollback).
-export function executeActions(root, changes, { faultAfter = null, pruneDirs = false } = {}) {
+// verifyInTransaction: optional callback(root) run after every mutation and before the transaction ends;
+// if it throws, everything is rolled back. A rollback that cannot restore a path is reported honestly
+// (err.rolledBack === false, err.rollbackFailures lists the repository-relative paths).
+export function executeActions(root, changes, { faultAfter = null, pruneDirs = false, verifyInTransaction = null } = {}) {
   const journal = []; // undo entries, applied in reverse
   const createdDirs = [];
   const prunedDirs = [];
@@ -66,19 +74,20 @@ export function executeActions(root, changes, { faultAfter = null, pruneDirs = f
       if (a.op === 'create' ? cur.kind !== 'missing' : (cur.kind !== 'file' || !cur.buf.equals(a.previous))) throw new Error(`target changed during apply: ${a.path}`);
       if (a.op === 'remove') {
         unlinkSync(abs);
-        journal.push({ abs, previous: a.previous });
+        journal.push({ abs, path: a.path, previous: a.previous });
       } else {
         const missing = [];
         for (let d = dirname(abs); d !== root;) { // collect dirs to create
           try { lstatSync(d); break; } catch { missing.push(d); d = dirname(d); }
         }
         for (const d of missing.reverse()) { mkdirSync(d); createdDirs.push(d); }
-        journal.push({ abs, previous: a.op === 'update' ? a.previous : null });
+        journal.push({ abs, path: a.path, previous: a.op === 'update' ? a.previous : null });
         writeAtomic(abs, a.buf);
       }
       n++;
       if (faultAfter !== null && n >= faultAfter) throw new Error('injected fault');
     }
+    if (verifyInTransaction) verifyInTransaction(root);
     if (pruneDirs) {
       const dirs = new Set();
       for (const a of changes) if (a.op === 'remove') for (let d = dirname(a.path); d !== '.'; d = dirname(d)) dirs.add(d);
@@ -88,20 +97,31 @@ export function executeActions(root, changes, { faultAfter = null, pruneDirs = f
       }
     }
   } catch (e) {
-    rollbackJournal(journal, createdDirs, prunedDirs);
-    const err = new AdapterError('APPLY_FAILED', 'apply failed and was rolled back; no partial state remains');
-    err.rolledBack = true;
+    const failures = rollbackJournal(root, journal, createdDirs, prunedDirs);
+    const err = new AdapterError('APPLY_FAILED', failures.length === 0
+      ? 'apply failed and was rolled back; no partial state remains'
+      : 'apply failed and rollback was incomplete; partial state may remain');
+    err.rolledBack = failures.length === 0;
+    err.rollbackFailures = failures;
     err.cause = e;
     throw err;
   }
 }
 
-function rollbackJournal(journal, createdDirs, prunedDirs = []) {
-  for (const d of [...prunedDirs].reverse()) { try { mkdirSync(d); } catch { /* exists */ } }
+function rollbackJournal(root, journal, createdDirs, prunedDirs = []) {
+  const failures = [];
+  const rel = (abs) => relative(root, abs).split(sep).join('/');
+  for (const d of [...prunedDirs].reverse()) { try { mkdirSync(d); } catch (e) { if (e.code !== 'EEXIST') failures.push(rel(d)); } }
   for (const j of [...journal].reverse()) {
-    try { if (j.previous === null) unlinkSync(j.abs); else writeFileSync(j.abs, j.previous); } catch { /* best effort per entry */ }
+    try {
+      if (j.previous === null) unlinkSync(j.abs); else writeFileSync(j.abs, j.previous);
+    } catch (e) {
+      // a created file that never materialised is already in its prior (absent) state
+      if (!(j.previous === null && e.code === 'ENOENT')) failures.push(j.path ?? rel(j.abs));
+    }
   }
-  for (const d of [...createdDirs].reverse()) { try { rmdirSync(d); } catch { /* not empty or gone */ } }
+  for (const d of [...createdDirs].reverse()) { try { rmdirSync(d); } catch (e) { if (e.code !== 'ENOENT') failures.push(rel(d)); } }
+  return [...new Set(failures)].sort();
 }
 
 const pick = (actions, op) => actions.filter((a) => a.op === op).map((a) => a.path);

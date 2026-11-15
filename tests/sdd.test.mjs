@@ -70,7 +70,7 @@ test('workflow has the ten canonical phases in order and three modes', () => {
     const m = mode(id);
     assert.deepEqual([...m.required_phases, ...m.skippable_phases].sort(), [...PHASES].sort(), id);
     assert.ok(m.required_phases.includes('implement') && m.required_phases.includes('independent-validation'), id);
-    assert.deepEqual(m.applies_gates, ['pre-implementation', 'pre-migration', 'pre-production-mutation', 'pre-deployment', 'pass'], id);
+    assert.deepEqual(m.applies_gates, ['sdd-artifact-write', 'pre-implementation', 'pre-migration', 'pre-production-mutation', 'pre-deployment', 'pass'], id);
   }
   assert.deepEqual(mode('hotfix').excluded_change_types, ['migration', 'production-schema']);
 });
@@ -332,6 +332,10 @@ expectError('workflow: missing mode', WF, (d) => { d.modes = d.modes.filter((m) 
 expectError('workflow: mode references an unknown phase', WF, (d) => { d.modes[0].skippable_phases.push('ship-it'); }, 'SDD_MODE', 'unknown-phase');
 expectError('workflow: mode drops a core traceability link', WF, (d) => { d.modes[2].traceability = d.modes[2].traceability.filter((l) => l !== 'criterion-to-evidence'); }, 'SDD_TRACE', 'missing-link');
 expectError('workflow: unknown traceability link', WF, (d) => { d.modes[0].traceability.push('vibes-to-code'); }, 'SDD_TRACE', 'unknown-link');
+expectError('workflow: sdd-artifact-write gate missing', WF, (d) => { d.gates = d.gates.filter((g) => g.id !== 'sdd-artifact-write'); }, 'SDD_GATE', 'missing-gate');
+expectError('workflow: sdd-artifact-write must require human approval', WF, (d) => { d.gates.find((g) => g.id === 'sdd-artifact-write').requires_human_approval = false; }, 'SDD_GATE', 'approval-required');
+expectError('workflow: pre-implementation keeps the broad "any file change" wording', WF, (d) => { d.gates.find((g) => g.id === 'pre-implementation').blocks = 'The implement phase and any file change.'; }, 'SDD_GATE', 'gate-wording');
+expectError('workflow: another gate borrows the artifact-write conditions', WF, (d) => { d.gates.find((g) => g.id === 'pre-implementation').requires.push('trusted-terminal-approval'); }, 'SDD_GATE', 'gate-separation');
 expectError('workflow: required gate missing', WF, (d) => { d.gates = d.gates.filter((g) => g.id !== 'pre-deployment'); }, 'SDD_GATE', 'missing-gate');
 expectError('workflow: unknown gate', WF, (d) => { d.gates.push({ id: 'pre-lunch', blocks: 'Lunch.', requires_human_approval: false, requires: [] }); }, 'SDD_GATE', 'unknown-gate');
 expectError('workflow: duplicate gate', WF, (d) => { d.gates.push({ ...d.gates[0] }); }, 'SDD_GATE', 'duplicate-gate');

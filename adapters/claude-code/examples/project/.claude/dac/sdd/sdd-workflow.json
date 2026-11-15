@@ -21,7 +21,7 @@
       "selection": "New products, new capabilities, cross-cutting or high-risk work, anything touching data models, security or multiple components, or work whose requirements are not yet understood.",
       "required_phases": ["constitution", "specify", "clarify", "plan", "checklist", "tasks", "analyze", "implement", "converge", "independent-validation"],
       "skippable_phases": [],
-      "applies_gates": ["pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
+      "applies_gates": ["sdd-artifact-write", "pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
       "traceability": ["requirement-to-criterion", "task-to-requirement", "task-to-criterion", "criterion-to-evidence", "decision-to-requirement", "risk-to-task"],
       "excluded_change_types": []
     },
@@ -30,7 +30,7 @@
       "selection": "Well-understood, bounded changes in an existing project that already has a constitution and an established approach, with a small number of tasks.",
       "required_phases": ["specify", "plan", "tasks", "implement", "independent-validation"],
       "skippable_phases": ["constitution", "clarify", "checklist", "analyze", "converge"],
-      "applies_gates": ["pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
+      "applies_gates": ["sdd-artifact-write", "pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
       "traceability": ["requirement-to-criterion", "task-to-requirement", "task-to-criterion", "criterion-to-evidence"],
       "excluded_change_types": [],
       "max_tasks": 10
@@ -40,7 +40,7 @@
       "selection": "Urgent, narrowly scoped correction of a defect in existing behavior. Never for migrations, production schema changes or new capabilities. Urgency never waives approval or independent validation.",
       "required_phases": ["specify", "tasks", "implement", "independent-validation"],
       "skippable_phases": ["constitution", "clarify", "plan", "checklist", "analyze", "converge"],
-      "applies_gates": ["pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
+      "applies_gates": ["sdd-artifact-write", "pre-implementation", "pre-migration", "pre-production-mutation", "pre-deployment", "pass"],
       "traceability": ["requirement-to-criterion", "task-to-requirement", "task-to-criterion", "criterion-to-evidence"],
       "excluded_change_types": ["migration", "production-schema"],
       "max_tasks": 3
@@ -49,9 +49,15 @@
   "gates": [
     {
       "id": "pre-implementation",
-      "blocks": "The implement phase and any file change.",
+      "blocks": "The implement phase and any implementation, code, test, script or configuration change outside the exact SDD documentation allowlist (files inside that allowlist are governed by sdd-artifact-write).",
       "requires_human_approval": true,
       "requires": ["requirements-complete", "tasks-have-criteria", "traceability-complete", "required-phases-complete", "scope-confined"]
+    },
+    {
+      "id": "sdd-artifact-write",
+      "blocks": "Persisting managed SDD documentation (Constitution, Specify) under the project-owned .sdd/ allowlist through the SDD Artifact Writer. Additional to, never a substitute for, pre-implementation and every other gate.",
+      "requires_human_approval": true,
+      "requires": ["artifacts-validated", "path-allowlist-confined", "plan-digest-bound", "trusted-terminal-approval"]
     },
     {
       "id": "pre-migration",

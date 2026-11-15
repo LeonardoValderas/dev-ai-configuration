@@ -22,12 +22,12 @@ export const SPEC_KIT_PIN = Object.freeze({
 
 export const PHASES = ['constitution', 'specify', 'clarify', 'plan', 'checklist', 'tasks', 'analyze', 'implement', 'converge', 'independent-validation'];
 export const MODES = ['full', 'lightweight', 'hotfix'];
-export const GATES = ['pre-implementation', 'pre-migration', 'pre-production-mutation', 'pre-deployment', 'pass'];
-const BLOCKING_APPROVAL = ['pre-implementation', 'pre-migration', 'pre-production-mutation', 'pre-deployment'];
+export const GATES = ['sdd-artifact-write', 'pre-implementation', 'pre-migration', 'pre-production-mutation', 'pre-deployment', 'pass'];
+const BLOCKING_APPROVAL = ['sdd-artifact-write', 'pre-implementation', 'pre-migration', 'pre-production-mutation', 'pre-deployment'];
 export const ARTIFACTS = ['requirements', 'acceptance-criteria', 'technical-decisions', 'tasks', 'risks', 'validation-evidence', 'traceability'];
 const LINKS = ['requirement-to-criterion', 'task-to-requirement', 'task-to-criterion', 'criterion-to-evidence', 'decision-to-requirement', 'risk-to-task'];
 const CORE_LINKS = LINKS.slice(0, 4);
-const CONDITIONS = new Set(['requirements-complete', 'tasks-have-criteria', 'traceability-complete', 'required-phases-complete', 'scope-confined', 'pre-implementation-passed', 'rollback-plan-recorded', 'independent-validation', 'useful-evidence', 'all-criteria-covered', 'tasks-done']);
+const CONDITIONS = new Set(['requirements-complete', 'tasks-have-criteria', 'traceability-complete', 'required-phases-complete', 'scope-confined', 'pre-implementation-passed', 'rollback-plan-recorded', 'independent-validation', 'useful-evidence', 'all-criteria-covered', 'tasks-done', 'artifacts-validated', 'path-allowlist-confined', 'plan-digest-bound', 'trusted-terminal-approval']);
 const ALWAYS_REQUIRED = ['specify', 'tasks', 'implement', 'independent-validation'];
 const HOTFIX_EXCLUDED = ['migration', 'production-schema'];
 const PRECONDITIONS = ['inspect-project', 'backup-created', 'conflict-report-reviewed', 'explicit-approval'];
@@ -79,7 +79,9 @@ export function checkWorkflow(doc) {
     if (!GATES.includes(g.id)) errors.push(err('SDD_GATE', 'unknown-gate', `$.gates[${i}].id`, `unknown gate "${g.id}"`));
     if (BLOCKING_APPROVAL.includes(g.id) && g.requires_human_approval !== true) errors.push(err('SDD_GATE', 'approval-required', `$.gates[${i}].requires_human_approval`, `gate "${g.id}" must require human approval`));
     for (const c of g.requires) if (!CONDITIONS.has(c)) errors.push(err('SDD_GATE', 'unknown-condition', `$.gates[${i}].requires`, `unknown gate condition "${c}"`));
-    const need = g.id === 'pass' ? ['independent-validation', 'useful-evidence', 'all-criteria-covered'] : g.id === 'pre-implementation' ? ['requirements-complete', 'tasks-have-criteria', 'traceability-complete', 'scope-confined'] : [];
+    const need = g.id === 'sdd-artifact-write' ? ['artifacts-validated', 'path-allowlist-confined', 'plan-digest-bound', 'trusted-terminal-approval'] : g.id === 'pass' ? ['independent-validation', 'useful-evidence', 'all-criteria-covered'] : g.id === 'pre-implementation' ? ['requirements-complete', 'tasks-have-criteria', 'traceability-complete', 'scope-confined'] : [];
+    if (g.id === 'pre-implementation' && /any file change/.test(g.blocks)) errors.push(err('SDD_GATE', 'gate-wording', `$.gates[${i}].blocks`, 'pre-implementation must be limited to implementation, code, tests, scripts and configuration outside the SDD documentation allowlist'));
+    if (g.id !== 'sdd-artifact-write') for (const c of g.requires) if (/^(artifacts-validated|path-allowlist-confined|plan-digest-bound|trusted-terminal-approval)$/.test(c)) errors.push(err('SDD_GATE', 'gate-separation', `$.gates[${i}].requires`, `gate "${g.id}" must not borrow the sdd-artifact-write conditions`));
     for (const c of need) if (!g.requires.includes(c)) errors.push(err('SDD_GATE', 'missing-condition', `$.gates[${i}].requires`, `gate "${g.id}" must require "${c}"`));
   });
 
