@@ -27,7 +27,8 @@ Exit codes: 0 ok, 1 conflict/failure, 2 usage error.
 | `.claude/rules/dac-sdd.md`, `.claude/dac/sdd/*.json` | Full, Lightweight and Hotfix SDD, phases, gates, owners |
 | `.claude/settings.json` | default mode only; Context7 denied and disabled |
 | `.claude/hooks/dac-scope-guard.mjs`, `dac-scopes.json` | write-scope guard derived from `writable_paths` |
-| `.mcp.json` | only with `--enable-context7` |
+| `.mcp.json` | only with `--enable-context7` and/or `--sdd-handoff` |
+| `.dac/runtime/sdd-handoff/*.mjs`, handoff entries in `.mcp.json`/`.claude/settings.json`, tool on `technical-planner` | only with `--sdd-handoff` (opt-in); see [sdd-input-handoff.md](sdd-input-handoff.md) |
 | `.claude/dac-manifest.json` | managed-file list with SHA-256 digests |
 
 Committed golden output: `adapters/claude-code/examples/` (a test fails on any drift).
@@ -46,6 +47,7 @@ Committed golden output: `adapters/claude-code/examples/` (a test fails on any d
 - Optional agents (`payment-integration`) are off unless requested. Context7 is off unless
   `--enable-context7`; then only the credential-free remote HTTP declaration is emitted
   and it is never auto-approved. `bypassPermissions` is never emitted.
+- `--sdd-handoff` (off by default) adds exactly one permission, `mcp__dac-sdd-handoff__sdd_handoff_submit`, in `permissions.allow` and in the `tools` of `technical-planner` only; `verifyWithinCanonical` rejects any other MCP tool, any other allow entry, any other enabled server and any absolute path in the generated entry. `code-reviewer` and the implementers never receive it.
 - `verifyWithinCanonical` re-parses the generated files after generation and aborts if any
   permission exceeds its manifest.
 - **Denied means BLOCKED.** A denial is final: report `execution_status` BLOCKED, do not retry

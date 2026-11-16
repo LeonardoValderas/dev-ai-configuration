@@ -20,8 +20,8 @@ Run from a clone of this repository (clean Git checkout, see section 4). `--targ
 existing, absolute-resolvable project directory; `--provider` is repeatable or comma-separated.
 
 ```
-node installer/bootstrap.mjs plan [--provider <p>...] [--target <dir>] [--context7] [--json]
-node installer/bootstrap.mjs apply --provider <p>... --target <dir> [--context7] [--optional-agent <id>] [--dry-run] [--json]
+node installer/bootstrap.mjs plan [--provider <p>...] [--target <dir>] [--context7] [--sdd-handoff] [--json]
+node installer/bootstrap.mjs apply --provider <p>... --target <dir> [--context7] [--optional-agent <id>] [--sdd-handoff] [--dry-run] [--json]
 node installer/bootstrap.mjs verify --target <dir> [--json]
 node installer/bootstrap.mjs update --target <dir> [--dry-run] [--json]
 node installer/bootstrap.mjs uninstall --provider <p> --target <dir> [--dry-run] [--json]
@@ -37,11 +37,20 @@ Providers: `claude-code`, `codex`, `cursor`. Exit codes: 0 ok, 1 conflict/failur
 | `update` | Explicit only (never run by `apply`/`verify`). Regenerates every installed provider from this checkout, keeping its recorded options, and moves the whole project to the checkout's version atomically. Drift is a CONFLICT with zero writes. Also migrates legacy installs. |
 | `uninstall` | Removes one provider's unmodified files. Drift is a CONFLICT with zero writes (a deliberate change from the per-provider CLI, which keeps modified files). Empty directories it leaves are pruned. Last provider removes `.dac/`. |
 
+### Claude Code SDD handoff runtime (`--sdd-handoff`)
+
+Claude Code only, off by default; asking for it without `claude-code` fails (`OPTIONS`). It installs the stateless submit-only MCP proxy under
+`.dac/runtime/sdd-handoff/`, a portable `.mcp.json` entry (project-relative script, `--target .`, `--runtime-dir ${DAC_SDD_RUNTIME_DIR}`), the single
+`mcp__dac-sdd-handoff__sdd_handoff_submit` permission and the tool on `technical-planner` only. The files are owned by the `claude-code` manifest (`sdd_handoff: true`; the
+`.dac/standard.json` provider entry gains `sdd_handoff: true`) and go through the same plan/journal/rollback/uninstall as every other managed file;
+`update` keeps the recorded option and never enables it on its own; project-owned `.sdd/` is preserved byte for byte and the Writer never touches `.dac/`.
+Full lifecycle (custodian, runtime directory, Writer, failure behavior): [sdd-input-handoff.md](sdd-input-handoff.md).
+
 ### Per-provider commands (still available)
 
 ```
-node adapters/claude-code/cli.mjs plan [--enable-context7] [--optional-agent <id>] [--json]
-node adapters/claude-code/cli.mjs apply --target <dir> [--enable-context7] [--optional-agent <id>] [--dry-run] [--json]
+node adapters/claude-code/cli.mjs plan [--enable-context7] [--optional-agent <id>] [--sdd-handoff] [--json]
+node adapters/claude-code/cli.mjs apply --target <dir> [--enable-context7] [--optional-agent <id>] [--sdd-handoff] [--dry-run] [--json]
 node adapters/claude-code/cli.mjs uninstall --target <dir> [--dry-run] [--json]
 
 node adapters/codex/cli.mjs plan [--include-context7-template] [--json]
@@ -172,6 +181,10 @@ provider; shared `AGENTS.md` in both orders with final removal; legacy migration
 traversal rejection; unrelated target changes preserved; no-write `plan`/`verify`; Context7 off by
 default; no machine paths or OpenClaw references; no Spec Kit install.
 
+The Claude Code handoff runtime is covered by `tests/claude-handoff-bootstrap.test.mjs`: clean install, verify, idempotence, update, uninstall; opt-in of an existing Claude project;
+conflicts with zero writes; injected-fault rollback for apply, update and uninstall; `.sdd/` byte preservation; no Codex/Cursor/HOME changes; least-privilege agents/settings; no machine paths;
+the installed proxy running end to end from the project root without a manual `sdd-input.json`. The three skipped tests of the suite are listed and justified in [sdd-input-handoff.md](sdd-input-handoff.md#6-skipped-tests-in-the-full-suite-exactly-three).
+
 ## 11. Known limitations
 
 - Authenticated provider enforcement is UNVERIFIED; the generated files are declarative.
@@ -180,7 +193,8 @@ default; no machine paths or OpenClaw references; no Spec Kit install.
 - `apply` does not downgrade silently: a different recorded commit requires `update`, which also allows moving to an older commit. Ancestry of commits is not checked.
 - Cursor IDE vs Agent CLI behavior differs; enforcement is unverified for both.
 - Provider native support for `AGENTS.md` may change.
+- Handoff runtime: Claude Code only; a live model calling the tool is UNVERIFIED; `apply` without `--sdd-handoff` on a project that has it removes the managed runtime files (see [sdd-input-handoff.md](sdd-input-handoff.md)).
 
 ## 12. Related
 
-Project-owned SDD artifact storage is separate from bootstrap-owned files: [sdd-artifact-writer.md](sdd-artifact-writer.md). Bootstrap `apply`, `update`, `uninstall` and rollback preserve `.sdd/` byte for byte; bootstrap owns `.dac/` exclusively and the artifact writer never touches `.dac/`.
+SDD input handoff (Claude Code): [sdd-input-handoff.md](sdd-input-handoff.md). Project-owned SDD artifact storage is separate from bootstrap-owned files: [sdd-artifact-writer.md](sdd-artifact-writer.md). Bootstrap `apply`, `update`, `uninstall` and rollback preserve `.sdd/` byte for byte; bootstrap owns `.dac/` exclusively and the artifact writer never touches `.dac/`.

@@ -12,16 +12,18 @@ Commands:
   uninstall --target <dir> Remove unmodified adapter-managed files (--dry-run supported)
 Options:
   --enable-context7        Generate the optional Context7 .mcp.json (disabled by default)
+  --sdd-handoff            Install the SDD input-handoff runtime (.dac/runtime/sdd-handoff, submit-only MCP proxy); off by default
   --optional-agent <id>    Also generate an optional catalog agent (disabled by default)
   --dry-run                Report actions without writing
   --json                   Machine-readable output`;
 
 const args = process.argv.slice(2);
 const cmd = args.shift();
-const opts = { context7: false, optionalAgents: [], dryRun: false, json: false, target: undefined };
+const opts = { context7: false, sddHandoff: false, optionalAgents: [], dryRun: false, json: false, target: undefined };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--enable-context7') opts.context7 = true;
+  else if (a === '--sdd-handoff') opts.sddHandoff = true;
   else if (a === '--dry-run') opts.dryRun = true;
   else if (a === '--json') opts.json = true;
   else if (a === '--optional-agent' && args[i + 1]) opts.optionalAgents.push(args[++i]);

@@ -52,8 +52,9 @@ function parseStandard(v) {
   const providers = {};
   for (const p of sortStr(Object.keys(v.providers))) {
     const r = v.providers[p];
-    if (!PROVIDERS.includes(p) || !exactKeys(r, ['adapter_version', 'context7', 'optional_agents']) || typeof r.adapter_version !== 'string' || typeof r.context7 !== 'boolean' || !Array.isArray(r.optional_agents) || r.optional_agents.some((a) => typeof a !== 'string')) bad('standard record has invalid provider entry');
-    providers[p] = { adapter_version: r.adapter_version, context7: r.context7, optional_agents: sortStr(r.optional_agents) };
+    const withHandoff = p === 'claude-code' && r && r.sdd_handoff !== undefined; // optional, claude-code only, only ever `true`
+    if (!PROVIDERS.includes(p) || !exactKeys(r, withHandoff ? ['adapter_version', 'context7', 'optional_agents', 'sdd_handoff'] : ['adapter_version', 'context7', 'optional_agents']) || typeof r.adapter_version !== 'string' || typeof r.context7 !== 'boolean' || !Array.isArray(r.optional_agents) || r.optional_agents.some((a) => typeof a !== 'string') || (withHandoff && r.sdd_handoff !== true)) bad('standard record has invalid provider entry');
+    providers[p] = { adapter_version: r.adapter_version, context7: r.context7, optional_agents: sortStr(r.optional_agents), ...(withHandoff ? { sdd_handoff: true } : {}) };
   }
   return { schema: 1, standard_version: v.standard_version, standard_commit: v.standard_commit, providers };
 }
@@ -73,9 +74,9 @@ function parseLedger(v) {
 function optionsFromManifest(p, m) {
   if (p === 'claude-code') {
     const defaults = selectAgents(JSON.parse(readFileSync(resolve(REPO_ROOT, 'standards/manifests/agents/agent-catalog.json'), 'utf8')));
-    return { context7: m.context7_enabled === true, optionalAgents: sortStr(m.agents.filter((a) => !defaults.includes(a))) };
+    return { context7: m.context7_enabled === true, optionalAgents: sortStr(m.agents.filter((a) => !defaults.includes(a))), sddHandoff: m.sdd_handoff === true };
   }
-  return { context7: m.context7_template === true, optionalAgents: [] };
+  return { context7: m.context7_template === true, optionalAgents: [], sddHandoff: false };
 }
 
 function readState(root) {
@@ -118,7 +119,7 @@ function readState(root) {
 const act = (op, path, buf, previous) => ({ op, path, ...(buf ? { buf } : {}), ...(previous ? { previous } : {}) });
 
 function genProvider(p, o) {
-  if (p === 'claude-code') return generateClaude({ context7: o.context7, optionalAgents: o.optionalAgents });
+  if (p === 'claude-code') return generateClaude({ context7: o.context7, optionalAgents: o.optionalAgents, sddHandoff: o.sddHandoff === true });
   if (o.optionalAgents.length) throw new AdapterError('OPTIONS', 'optional agents are only supported for claude-code');
   return generatePortable(p, { context7: o.context7, neutralAgents: true });
 }
@@ -185,7 +186,7 @@ function compose(root, state, src, finalSet, optionsFor, { requireSameCommit }) 
       }
       actions.push(...acts);
       conflicts.push(...r.conflicts);
-      providerRecords[p] = { adapter_version: plan.manifest.adapter_version, context7: optionsFor(p).context7, optional_agents: sortStr(optionsFor(p).optionalAgents) };
+      providerRecords[p] = { adapter_version: plan.manifest.adapter_version, context7: optionsFor(p).context7, optional_agents: sortStr(optionsFor(p).optionalAgents), ...(p === 'claude-code' && optionsFor(p).sddHandoff ? { sdd_handoff: true } : {}) };
     }
   }
   const shared = planSharedAgents(root, state, finalSet, claimed);
@@ -244,9 +245,14 @@ function planUninstall(root, state, provider, src) {
 }
 
 // ---- public API ------------------------------------------------------------
-const norm = (o = {}) => ({ context7: o.context7 === true, optionalAgents: sortStr(o.optionalAgents ?? []) });
+const norm = (o = {}) => ({ context7: o.context7 === true, optionalAgents: sortStr(o.optionalAgents ?? []), sddHandoff: o.sddHandoff === true });
 const pick = (actions, op) => actions.filter((a) => a.op === op).map((a) => a.path);
 const summarize = (status, actions, conflicts, src, finalSet) => ({ status, conflicts, created: pick(actions, 'create'), updated: pick(actions, 'update'), removed: pick(actions, 'remove'), unchanged: pick(actions, 'unchanged'), standard: { version: src.version, commit: src.head }, providers: finalSet });
+
+// The handoff runtime exists for Claude Code only; asking for it without claude-code is an error, never a silent no-op.
+function checkHandoff(requested, opts) {
+  if (opts.sddHandoff && !requested.includes('claude-code')) throw new AdapterError('OPTIONS', 'the SDD handoff runtime is only supported for claude-code');
+}
 
 function checkProviders(list) {
   if (!Array.isArray(list) || !list.length || list.some((p) => !PROVIDERS.includes(p)) || new Set(list).size !== list.length) throw new AdapterError('PROVIDER', `providers must be a non-empty unique subset of ${PROVIDERS.join(', ')}`);
@@ -282,9 +288,11 @@ export function apply({ target, providers, options = {}, dryRun = false, faultAf
   const { src, root, state } = begin(target);
   const finalSet = sortStr(new Set([...state.installed, ...requested]));
   const opts = norm(options);
+  checkHandoff(requested, opts);
   const optionsFor = (p) => (requested.includes(p) ? opts : state.providers.get(p).options);
   const plan = compose(root, state, src, finalSet, optionsFor, { requireSameCommit: true });
-  return commit(root, src, state, plan, finalSet, { dryRun, faultAfter, hooks, pruneDirs: false, okStatus: 'APPLIED' });
+  // pruneDirs only removes directories emptied by this transaction's managed removals (e.g. disabling the handoff runtime).
+  return commit(root, src, state, plan, finalSet, { dryRun, faultAfter, hooks, pruneDirs: true, okStatus: 'APPLIED' });
 }
 
 export function update({ target, dryRun = false, faultAfter = null, hooks = null }) {
@@ -308,6 +316,7 @@ export function plan({ providers, options = {}, target = null }) {
   const requested = checkProviders(providers);
   const src = verifySource(REPO_ROOT);
   const opts = norm(options);
+  checkHandoff(requested, opts);
   const files = {};
   for (const p of requested) files[p] = [...genProvider(p, opts).files.keys()];
   const sharedOwners = requested.filter((p) => SHARED_PROVIDERS.includes(p));
@@ -331,7 +340,7 @@ export function verify({ target }) {
     for (const f of st.manifest.files) check(f.path, f.sha256, `${p} managed file`);
     if (st.legacy) findings.push({ kind: 'legacy', path: MANIFEST_PATHS[p], reason: 'legacy provider manifest; run update to migrate' });
     const rec = state.standard.value?.providers[p];
-    if (rec && (rec.adapter_version !== st.manifest.adapter_version || rec.context7 !== st.options.context7 || !same(rec.optional_agents, st.options.optionalAgents))) findings.push({ kind: 'modified', path: STANDARD_PATH, reason: `standard record disagrees with the ${p} manifest` });
+    if (rec && (rec.adapter_version !== st.manifest.adapter_version || rec.context7 !== st.options.context7 || !same(rec.optional_agents, st.options.optionalAgents) || (rec.sdd_handoff === true) !== st.options.sddHandoff)) findings.push({ kind: 'modified', path: STANDARD_PATH, reason: `standard record disagrees with the ${p} manifest` });
   }
   if (state.entry) check(SHARED_AGENTS_PATH, state.entry.sha256, 'shared AGENTS.md');
   let source = { status: 'UNVERIFIED' };
@@ -353,16 +362,18 @@ Providers: ${PROVIDERS.join(', ')} (repeat --provider or comma-separate)
 Options:
   --context7               Opt in to the Context7 template for the provider(s) being applied (off by default)
   --optional-agent <id>    claude-code only: also generate an optional catalog agent
+  --sdd-handoff            claude-code only: install the SDD input-handoff runtime (.dac/runtime/sdd-handoff, submit-only MCP proxy, .mcp.json)
   --dry-run                Report actions without writing
   --json                   Machine-readable output
 Requires this checkout to be a clean Git repository with a verifiable HEAD.`;
 
 function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const o = { cmd, providers: [], context7: false, optionalAgents: [], dryRun: false, json: false, target: undefined };
+  const o = { cmd, providers: [], context7: false, sddHandoff: false, optionalAgents: [], dryRun: false, json: false, target: undefined };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a === '--context7') o.context7 = true;
+    else if (a === '--sdd-handoff') o.sddHandoff = true;
     else if (a === '--dry-run') o.dryRun = true;
     else if (a === '--json') o.json = true;
     else if (a === '--provider' && rest[i + 1]) o.providers.push(...rest[++i].split(','));
@@ -374,7 +385,7 @@ function parseArgs(argv) {
   if (cmd !== 'plan' && !o.target) return { usage: '--target is required' };
   if (cmd === 'apply' && !o.providers.length) return { usage: '--provider is required' };
   if (cmd === 'uninstall' && o.providers.length !== 1) return { usage: 'uninstall takes exactly one --provider' };
-  if (['verify', 'update'].includes(cmd) && (o.providers.length || o.context7 || o.optionalAgents.length)) return { usage: `${cmd} does not take provider or template options` };
+  if (['verify', 'update'].includes(cmd) && (o.providers.length || o.context7 || o.optionalAgents.length || o.sddHandoff)) return { usage: `${cmd} does not take provider or template options` };
   return o;
 }
 
@@ -383,7 +394,7 @@ function main(argv) {
   if (o.usage !== undefined) { console.error((o.usage ? o.usage + '\n' : '') + USAGE); return o.help ? 0 : 2; }
   const out = (obj, text) => console.log(o.json ? JSON.stringify(obj, null, 2) : text);
   const line = (r) => `${r.status}: created ${r.created.length}, updated ${r.updated.length}, removed ${r.removed.length}, unchanged ${r.unchanged.length}${r.conflicts.map((c) => `\nCONFLICT ${c.path}: ${c.reason}`).join('')}`;
-  const options = { context7: o.context7, optionalAgents: o.optionalAgents };
+  const options = { context7: o.context7, optionalAgents: o.optionalAgents, sddHandoff: o.sddHandoff };
   try {
     if (o.cmd === 'plan') {
       const r = plan({ providers: o.providers.length ? o.providers : PROVIDERS, options, target: o.target });

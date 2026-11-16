@@ -9,6 +9,7 @@
     "validate": "node installer/validate.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:pty-gate": "node tests/support/pty-gate.mjs",
-    "sdd-writer": "node adapters/shared/sdd-writer/cli.mjs"
+    "sdd-writer": "node adapters/shared/sdd-writer/cli.mjs",
+    "sdd-handoff": "node adapters/shared/sdd-handoff/custodian-cli.mjs"
   }
 }

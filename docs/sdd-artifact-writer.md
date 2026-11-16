@@ -361,3 +361,92 @@ Real unresolved items only (everything in sections 2 to 7 is decided):
 - Risk: a same-user process can imitate a TTY; local confirmation raises the bar but
   is not a security boundary against a hostile local user.
 - Risk: inherited hard-kill, temp-file and best-effort rollback limits (section 7).
+
+## Input handoff PoC 2 (Claude Code only, human-started in-memory custodian)
+
+Experimental, Phase 2 PoC. It removes the manual JSON input file for Constitution + Specify without giving any agent
+write permission. Codex and Cursor are not wired. `--input <file>` is unchanged (same schemas, gates and TTY authorization).
+
+Flow: human starts the **custodian** (foreground, independent of Claude/MCP) -> Claude calls the single MCP tool
+`sdd_handoff_submit` -> the **stateless MCP proxy** forwards it to the custodian -> the custodian validates with the existing
+`plan()` (zero writes) and keeps the envelope **in its memory** -> the human closes Claude if desired -> `plan|apply --target <dir>
+--handoff <id>` in the existing writer CLI (`--handoff` and `--input` are mutually exclusive) -> `apply` still asks for the exact
+confirmation phrase on `/dev/tty` -> `verify`.
+
+Commands (repository root; `<T>` is the real target directory):
+
+```
+node adapters/shared/sdd-handoff/custodian-cli.mjs start  --target <T> --runtime-dir <R>   # foreground; Ctrl-C destroys all handoffs
+node adapters/shared/sdd-handoff/custodian-cli.mjs status --target <T> --runtime-dir <R>   # never prints payload content
+node adapters/shared/sdd-handoff/custodian-cli.mjs stop   --target <T> --runtime-dir <R>   # or removes a verified stale socket
+node adapters/shared/sdd-handoff/custodian-cli.mjs cancel --target <T> --runtime-dir <R> --handoff <id>
+node adapters/shared/sdd-writer/cli.mjs plan|apply --target <T> --runtime-dir <R> --handoff <id>
+```
+
+- **Target** is fixed when the human starts the custodian (and in the MCP server args of `.mcp.json`); it is never a tool
+  argument, extra tool fields are rejected, and the custodian refuses any request carrying another target identity
+  (`TARGET_MISMATCH`). Each stored entry is bound to the real target identity (realpath, device, inode) and the CLI re-checks
+  both that and the payload digest.
+- **Endpoint discovery**: `<R>` is an absolute, normalized runtime directory the human chooses (created 0700 if missing; its
+  parent must already exist). It is never derived from `TMPDIR`/`os.tmpdir()`, the cwd or any environment variable, and it is
+  never a tool argument: the same `--runtime-dir <R>` is given to the custodian, to the MCP server (args in `.mcp.json`, written by
+  the human/bootstrap; the example uses a placeholder, no machine path is distributed) and to the Writer command shown by the
+  MCP result. The socket is `<R>/h2-<sha256(realpath, device, inode)[0:20]>.sock`, so every process reaches the same
+  endpoint regardless of TMPDIR or cwd, and a restarted MCP proxy reconnects to the same custodian.
+- **Discovery metadata** `<R>/h2-<key>.json` (0600, atomic temp+rename, versioned `dac-sdd-handoff-endpoint` v1) holds only the
+  target identity, runtime dir, socket name + inode/device, custodian instance id/pid/start time. It contains no payload, handoff
+  id, capability or approval material (Constitution/Specify bytes stay memory-only). Clients read it with `O_NOFOLLOW`, require
+  a plain single-link file owned by the user with mode 0600 and an exact key set, check target/runtime-dir/socket-name binding,
+  require the socket inode to equal the recorded one (socket substitution is refused before any request is sent), and after
+  connecting require the live custodian to confirm the same instance id, pid and target. The runtime directory must be a real
+  path (no symlink components; use the resolved path, e.g. `/private/var/...` on macOS) owned by the user at 0700, and every
+  ancestor must be a real directory owned by root or the user and not group/world-writable (unless sticky).
+- **Handoff id** `sdd-h2.<custodian instance>.<256-bit secret>` is a routing capability, never an approval. The custodian stores
+  only the secret's hash; unknown, expired, consumed, cancelled and other-instance ids give the same error. A restarted custodian
+  is a new instance: old ids never resolve. Commands shown to the human are built only from the fixed target and the id.
+- **Limits**: TTL exactly 600 s (live at +599999 ms, gone at +600000 ms; a lease does not extend it), 16 live handoffs (the 17th
+  is `HANDOFF_CAPACITY`), 512 KiB serialized envelope (exactly 524288 bytes accepted, +1 rejected).
+- **Endpoint safety**: Unix socket only (no network), directory 0700 and socket 0600; both sides refuse symlinks, aliases, foreign
+  owner, group/world access and over-long paths. macOS/Linux only. One custodian per target and runtime directory is enforced
+  (second `start` => `CUSTODIAN_RUNNING`); two runtime directories are two isolated endpoints, and each client only ever uses the
+  directory it was configured with. Owner checks are enforced but cannot be exercised unprivileged (no second uid in tests).
+  `DAC_SDD_HANDOFF_DIR` and TMPDIR-based defaults were removed.
+- **Semantics**: `plan --handoff` peeks, never consumes. `apply --handoff` takes an exclusive lease (concurrent apply:
+  `HANDOFF_LEASED`), invokes the unchanged `apply()`, and commits consumption only after `APPLIED`. Denial, timeout, no TTY,
+  failure/rollback, `UNCHANGED`, a dead client connection and drift release the lease and leave the handoff live until TTL.
+  Replay of a consumed handoff is `HANDOFF_NOT_FOUND`. A custodian that is gone fails closed (`HANDOFF_UNAVAILABLE`, zero writes).
+- **Uncertain consumption**: if the apply persisted but the commit cannot be confirmed (custodian died/unreachable), the CLI
+  keeps the writer's `APPLIED` result, sets `handoff.consumption = "uncertain"` with `evidence`
+  (`phase`, `error_code`, `writer_status`, `plan_digest`, `files_changed`), prints a warning and exits **3**. The writer is
+  never re-run automatically; the operator should run `verify` and, if the custodian is alive, `cancel` the handoff. If the
+  handoff expired or was cancelled mid-apply, `consumption = "gone"` (definitive). Normal results are `consumed` / `not-consumed`.
+  Likewise, if the apply fails **and its rollback fails** (`rollback.status = "failed"`), disk state may be partially modified:
+  the CLI reports the original failure (`code`, `rollback`, `files_changed`, `evidence`) plus `handoff.consumption = "uncertain"`
+  (`evidence.phase = "apply"`), does not consume, does not re-run the writer, and exits **3**; inspect the listed paths, run
+  `verify`, then `cancel` the handoff. Ordinary failures (denial, timeout, preflight, clean rollback) still release the lease
+  and leave the handoff retryable until TTL.
+- **Lifecycle**: closing Claude or the MCP proxy (even `kill -9`) never touches handoffs. Closing the custodian (Ctrl-C, SIGTERM,
+  SIGHUP, `stop`) destroys them and removes its socket. After a hard kill the orphan socket remains; `start` and `stop` remove it
+  only after verifying it is a private socket owned by the user and that connecting is refused (never by age); `status` reports
+  `stale-socket` and removes nothing. A socket with a live listener, or any non-socket file, is never removed.
+- **Error forwarding**: validation errors returned to the agent are redacted (`errors.mjs`: fixed `code/rule/path/message` shape, quoted ids and unknown field names removed, bounded to 50); the custodian and the proxy both apply it.
+- **MCP proxy** (`mcp-server.mjs --target <T> --runtime-dir <R>`): exactly one tool, no state, no persistent connection, no listener, no
+  file writes. If no custodian runs it still connects and lists its tool; submit then returns `CUSTODIAN_UNAVAILABLE` with the
+  start command for the human.
+- **Claude Code config**: installed by the project bootstrap (`node installer/bootstrap.mjs apply --provider claude-code --sdd-handoff --target <P>`), see
+  [sdd-input-handoff.md](sdd-input-handoff.md). The proxy lives in the project at `.dac/runtime/sdd-handoff/`; `.mcp.json` uses a project-relative script, `--target .` and
+  `--runtime-dir ${DAC_SDD_RUNTIME_DIR}` (no machine path is distributed; `adapters/claude-code/examples/sdd-handoff-poc/` shows the fragments). The only permission is
+  `mcp__dac-sdd-handoff__sdd_handoff_submit`: no Write/Edit/Bash grant, no apply/cancel tool. The Writer never writes `.dac/` or `.claude/` (tested).
+
+**Persistence surfaces (exhaustive)**: payload bytes, plan digests and payload digests exist only in custodian process memory and
+on the wire between local processes (the CLI/proxy verify a digest in transit; nothing is stored). On disk there is only the
+socket inode `h2-<20 hex>.sock` (name derives from the target identity, not from content) inside the 0700 directory. Nothing else
+is created by the handoff modules. The writer's own artifacts, receipts and locks are written only by the unchanged `apply()`
+after TTY approval. Foreground status lines go to the human's terminal.
+
+Residual risks: Node cannot read peer credentials of a Unix socket, so access control rests on the 0700 directory and 0600 socket;
+any same-uid process can connect, submit, `stop` the custodian, or read a payload for an id it holds, and a same-uid attacker can
+read process memory or imitate a TTY. The id is visible to whoever sees the tool output. A custodian dying after the writer began its
+transaction yields uncertain (not repeated) consumption. The defaults of `apply()` still require a clean standard checkout. A
+model-driven `tools/call` from a real Claude Code session needs a model credential and was not exercised by the worker; MCP
+`tools/call` runs over real stdio and real Claude Code connection/tool exposure is checked without a model call.

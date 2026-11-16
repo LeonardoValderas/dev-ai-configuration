@@ -5,9 +5,10 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const EXPECTED = 3; // tests 22, 22b, 22c
-const file = join(dirname(fileURLToPath(import.meta.url)), '..', 'sdd-artifact-writer.test.mjs');
-const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-name-pattern=PTY', file], { encoding: 'utf8', env: { ...process.env, DAC_REQUIRE_PTY: '1' } });
+const EXPECTED = 4; // writer tests 22, 22b, 22c + handoff PoC test 13
+const dir = join(dirname(fileURLToPath(import.meta.url)), '..');
+const files = [join(dir, 'sdd-artifact-writer.test.mjs'), join(dir, 'sdd-handoff.test.mjs')];
+const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-name-pattern=PTY', ...files], { encoding: 'utf8', env: { ...process.env, DAC_REQUIRE_PTY: '1' } });
 process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? '');
 const num = (k) => Number(new RegExp(`^# ${k} (\\d+)`, 'm').exec(r.stdout ?? '')?.[1] ?? NaN);
 const pass = num('pass'), fail = num('fail'), skipped = num('skipped');
