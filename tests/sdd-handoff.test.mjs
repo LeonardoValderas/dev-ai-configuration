@@ -16,9 +16,9 @@ import { createStore, HANDOFF_TTL_MS, MAX_LIVE_HANDOFFS, MAX_ENVELOPE_BYTES, par
 import { startCustodian, probeEndpoint } from '../adapters/shared/sdd-handoff/custodian.mjs';
 import { peekHandoff, withLease, submitHandoff, statusOf, cancelHandoff } from '../adapters/shared/sdd-handoff/client.mjs';
 import { createServer, TOOL_NAME, TOOL } from '../adapters/shared/sdd-handoff/mcp-server.mjs';
-import { ensurePrivateDir, assertPrivateDir, socketPath, assertPrivateSocket, resolveRuntimeDir, metaPath, writeMetadata, readMetadata } from '../adapters/shared/sdd-handoff/endpoint.mjs';
+import { ensurePrivateDir, assertPrivateDir, socketPath, assertPrivateSocket, resolveRuntimeDir, automaticRuntimeDir, metaPath, writeMetadata, readMetadata } from '../adapters/shared/sdd-handoff/endpoint.mjs';
 import { targetIdentity, endpointKey } from '../adapters/shared/sdd-handoff/identity.mjs';
-import { mcpServerEntry, runtimeFiles, TOOL_PERMISSION, SERVER_NAME, RUNTIME_DIR_ENV } from '../adapters/shared/sdd-handoff/claude-config.mjs';
+import { mcpServerEntry, runtimeFiles, TOOL_PERMISSION, SERVER_NAME } from '../adapters/shared/sdd-handoff/claude-config.mjs';
 import { createRuntime, claudeInit, verifySandbox, sandboxAvailable, isolatedBase, sandboxUnavailableReason } from './support/claude-runtime.mjs';
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'dac-hf-')));
@@ -80,7 +80,7 @@ function clone() {
   const A = (p) => join(dst, 'adapters/shared', p);
   return (cloneMemo = { root: dst, cli: A('sdd-writer/cli.mjs'), cust: A('sdd-handoff/custodian-cli.mjs'), mcp: A('sdd-handoff/mcp-server.mjs') });
 }
-// The process environment is deliberately unrelated to the endpoint: only an explicit --runtime-dir flag selects it.
+// The process environment is deliberately unrelated to the endpoint: the automatic platform+uid endpoint is the default; only an explicit (advanced/test) --runtime-dir override changes it.
 const envFor = (o = {}) => ({ PATH: process.env.PATH, HOME: scratch, ...(o.tmp ? { TMPDIR: o.tmp } : {}) });
 const withRt = (args, dir) => (args.includes('--runtime-dir') || !dir ? args : [...args, '--runtime-dir', dir]);
 // detached => setsid => NO controlling terminal (so /dev/tty cannot be opened), regardless of how the suite was started.
@@ -91,7 +91,7 @@ const runNode = (script, args, dir, { detached = true, tmp, cwd } = {}) => new P
 const cli = (args, dir, o) => runNode(clone().cli, args.includes('--handoff') ? withRt(args, dir) : args, dir, o);
 const custCli = (args, dir, o) => runNode(clone().cust, withRt(args, dir), dir, o);
 function spawnCustodian(target, dir, o = {}) {
-  const p = spawn(process.execPath, [clone().cust, 'start', '--target', target, '--runtime-dir', dir], { env: envFor(o), cwd: o.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  const p = spawn(process.execPath, [clone().cust, 'start', '--target', target, ...(dir ? ['--runtime-dir', dir] : [])], { env: envFor(o), cwd: o.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(p);
   let err = ''; p.stderr.on('data', (c) => { err += c; });
   const exited = new Promise((r) => p.once('close', (code, sig) => r({ code, sig })));
@@ -99,7 +99,7 @@ function spawnCustodian(target, dir, o = {}) {
   return { p, exited, ready, err: () => err };
 }
 function startMcp(target, dir, o = {}) {
-  const child = spawn(process.execPath, [clone().mcp, '--target', target, '--runtime-dir', dir], { stdio: ['pipe', 'pipe', 'pipe'], env: envFor(o), cwd: o.cwd });
+  const child = spawn(process.execPath, [clone().mcp, '--target', target, ...(dir ? ['--runtime-dir', dir] : [])], { stdio: ['pipe', 'pipe', 'pipe'], env: envFor(o), cwd: o.cwd });
   children.push(child);
   let buf = ''; const waiters = new Map(); let err = '';
   child.stderr.on('data', (c) => { err += c; });
@@ -315,7 +315,7 @@ test('6. [PROC] lifecycle: payload survives MCP exit and MCP restart; it does no
   const m3 = startMcp(target, dir); await m3.init(); assert.equal((await m3.rpc('tools/list', {})).result.tools.length, 1);
   const none = await m3.submit(envelope()); assert.equal(none.isError, true); assert.equal(none.body.code, 'CUSTODIAN_UNAVAILABLE'); m3.child.stdin.end(); await m3.exited;
   assert.equal(spawnSync(process.execPath, [clone().mcp, '--target', '/', '--runtime-dir', freshDir()], { encoding: 'utf8', env: envFor() }).status, 1, 'MCP refuses an unsafe target at startup');
-  assert.equal(spawnSync(process.execPath, [clone().mcp, '--target', target], { encoding: 'utf8', env: { ...envFor(), TMPDIR: dir } }).status, 2, 'no runtime-dir flag: the environment/tmpdir is never a fallback');
+  assert.equal(spawnSync(process.execPath, [clone().mcp, '--target', target, '--bogus'], { encoding: 'utf8', env: { ...envFor(), TMPDIR: dir } }).status, 2, 'unknown option is a usage error (the proxy never starts)');
   assert.equal(spawnSync(process.execPath, [clone().mcp], { encoding: 'utf8' }).status, 2);
 });
 
@@ -471,12 +471,12 @@ test('10. [UNIT] TTL over the socket: handoff is live at 599999 ms and gone at 6
 
 // ---- 11 Claude Code config ----------------------------------------------------------------------------------------------
 test('11. [UNIT] Claude Code handoff config is portable (project-relative + env reference), grants only the submit tool; example fragments match; no Codex/Cursor wiring', () => {
-  assert.deepEqual(mcpServerEntry(), { command: 'node', args: ['.dac/runtime/sdd-handoff/mcp-server.mjs', '--target', '.', '--runtime-dir', `\${${RUNTIME_DIR_ENV}}`] });
+  assert.deepEqual(mcpServerEntry(), { command: 'node', args: ['.dac/runtime/sdd-handoff/mcp-server.mjs', '--target', '.'] });
   assert.equal(TOOL_PERMISSION, 'mcp__dac-sdd-handoff__sdd_handoff_submit');
   const ex = join(REPO_ROOT, 'adapters/claude-code/examples/sdd-handoff-poc');
   assert.deepEqual(JSON.parse(readFileSync(join(ex, '.mcp.json'), 'utf8')), { mcpServers: { [SERVER_NAME]: mcpServerEntry() } });
   assert.deepEqual(JSON.parse(readFileSync(join(ex, '.claude/settings.json'), 'utf8')), { permissions: { allow: [TOOL_PERMISSION] }, enabledMcpjsonServers: [SERVER_NAME] });
-  for (const f of ['adapters/codex', 'adapters/cursor']) assert.equal(spawnSync('grep', ['-rli', 'sdd-handoff\\|sdd_handoff', join(REPO_ROOT, f)], { encoding: 'utf8' }).stdout.trim(), '', `${f} not wired`);
+  for (const f of ['adapters/cursor']) assert.equal(spawnSync('grep', ['-rli', 'sdd-handoff\\|sdd_handoff', join(REPO_ROOT, f)], { encoding: 'utf8' }).stdout.trim(), '', `${f} not wired`); // Codex wiring: tests/codex-handoff-bootstrap.test.mjs
   // source-level surface check: the proxy cannot apply, write, run commands or open its own listener
   const src = readFileSync(join(REPO_ROOT, 'adapters/shared/sdd-handoff/mcp-server.mjs'), 'utf8');
   assert.ok(!/child_process|writeFile|createServer\(\(|net\.createServer|\bapply\(|openTrustedTerminal/.test(src.replace(/export function createServer/g, '')));
@@ -515,9 +515,10 @@ test('14. [PROC] custodian TMPDIR=A, writer TMPDIR=B, MCP TMPDIR=C, different cw
   const prevT = process.env.TMPDIR; const prevD = process.env.DAC_SDD_HANDOFF_DIR; process.env.TMPDIR = fresh('tmpE'); process.env.DAC_SDD_HANDOFF_DIR = fresh('bogus');
   try { assert.equal((await statusOf(target, { dir })).pid, cu.p.pid); } finally { if (prevT === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = prevT; if (prevD === undefined) delete process.env.DAC_SDD_HANDOFF_DIR; else process.env.DAC_SDD_HANDOFF_DIR = prevD; }
   // no runtime dir => fail closed, never a tmpdir fallback (writer usage error; client/CLI error)
-  assert.equal((await runNode(clone().cli, ['plan', '--target', target, '--handoff', id], dir, { tmp: dir })).status, 2);
-  assert.equal((await runNode(clone().cust, ['status', '--target', target], dir, { tmp: dir })).status, 2);
-  assert.equal(await codeOf(() => statusOf(target)), 'HANDOFF_ENDPOINT'); assert.equal(await codeOf(() => statusOf(target, { dir: 'rel' })), 'HANDOFF_ENDPOINT');
+  // no override => the AUTOMATIC endpoint (platform+uid), never TMPDIR: no custodian for this target there => unavailable, nothing written
+  assert.equal((await runNode(clone().cli, ['plan', '--target', target, '--handoff', id], dir, { tmp: dir })).status, 1);
+  assert.equal((await runNode(clone().cust, ['status', '--target', target], dir, { tmp: dir })).status, 1);
+  assert.equal(await codeOf(() => statusOf(target)), 'HANDOFF_UNAVAILABLE'); assert.equal(await codeOf(() => statusOf(target, { dir: 'rel' })), 'HANDOFF_ENDPOINT');
   assert.deepEqual(snapshot(target), before); noSdd(target);
   // custodian exit removes socket and metadata; clients then fail closed
   cu.p.kill('SIGTERM'); await cu.exited; assert.deepEqual(readdirSync(dir), []);
@@ -556,12 +557,11 @@ test('15. [UNIT] discovery hardening: metadata/socket substitution, symlink, mod
   const k = await mkCust({ target }); const inK = await submitHandoff(target, envelope(), k.opts);
   assert.equal(await codeOf(() => peekHandoff(inK.handoff_id, target, opts)), 'HANDOFF_NOT_FOUND'); assert.equal(c.store.size, 1);
   // runtime dir validation
-  for (const bad of [undefined, '', 'rel/dir', '/', `${dir}/`, `${dir}/../x`, `${dir}/./y`, `${dir}\0x`]) assert.throws(() => resolveRuntimeDir(bad), { code: 'HANDOFF_ENDPOINT' }, String(bad));
-  assert.equal(await codeOf(() => startCustodian({ target: fresh('t'), writePlan: stubPlan })), 'HANDOFF_ENDPOINT', 'no implicit default directory');
+  for (const bad of ['', 'rel/dir', '/', `${dir}/`, `${dir}/../x`, `${dir}/./y`, `${dir}\0x`]) assert.throws(() => resolveRuntimeDir(bad), { code: 'HANDOFF_ENDPOINT' }, String(bad));
   const viaLink = join(shortBase, `rl${n++}`); symlinkSync(dir, viaLink); assert.equal(await codeOf(() => statusOf(target, { dir: viaLink })), 'HANDOFF_ENDPOINT'); assert.equal(await codeOf(() => startCustodian({ target: fresh('t'), dir: viaLink, writePlan: stubPlan })), 'HANDOFF_ENDPOINT');
   const open777 = join(shortBase, `w${n++}`); mkdirSync(open777); chmodSync(open777, 0o777); const under = join(open777, 'rt'); mkdirSync(under, { mode: 0o700 });
   assert.equal(await codeOf(() => startCustodian({ target: fresh('t'), dir: under, writePlan: stubPlan })), 'HANDOFF_ENDPOINT', 'group/world-writable non-sticky ancestor');
-  assert.equal(await codeOf(() => statusOf(target, { dir: join(shortBase, 'missing-rt') })), 'HANDOFF_ENDPOINT');
+  assert.equal(await codeOf(() => statusOf(target, { dir: join(shortBase, 'missing-rt') })), 'HANDOFF_UNAVAILABLE', 'absent runtime dir == custodian not running (the normal state before the first start)');
   // owner checks need a second uid (not testable unprivileged): assert the code path exists and the current-uid happy path passes
   assert.equal(lstatSync(mp).uid, process.getuid()); assert.match(readFileSync(new URL('../adapters/shared/sdd-handoff/endpoint.mjs', import.meta.url), 'utf8'), /not owned by the current user/);
   // the proxy accepts no endpoint/runtime/target selection through tool arguments
@@ -583,7 +583,7 @@ test('12. [REAL-CLAUDE] installed Claude Code starts the stateless MCP proxy fro
     const proven = verifySandbox(rt); assert.ok(proven.ok, JSON.stringify(proven));
     const target = join(rt.ws, 'target'); mkdirSync(target);
     // Concrete (machine-local) resolution of the portable entry, written only into this disposable sandbox workspace.
-    const entry = mcpServerEntry(); const args = [clone().mcp, '--target', realpathSync(target), '--runtime-dir', freshDir()];
+    const entry = mcpServerEntry(); const args = [clone().mcp, '--target', realpathSync(target)]; // generated entry plus the concrete (machine-local) script/target; automatic endpoint
     assert.equal(entry.args.length, args.length);
     writeFileSync(join(rt.ws, '.mcp.json'), JSON.stringify({ mcpServers: { [SERVER_NAME]: { command: process.execPath, args } } }));
     mkdirSync(join(rt.ws, '.claude')); writeFileSync(join(rt.ws, '.claude/settings.json'), JSON.stringify({ permissions: { allow: [TOOL_PERMISSION] }, enabledMcpjsonServers: [SERVER_NAME] }));
@@ -729,21 +729,82 @@ test('17b. [UNIT] metadata failure after listen closes and removes the socket wi
 
 // ---- 18 REAL Claude Code with the PORTABLE generated config (no model call) -----------------------------------------------------
 import { generate as generateClaudeFiles } from '../adapters/claude-code/lib/generate.mjs';
-test('18. [REAL-CLAUDE] the bootstrap-generated portable config (relative script, --target ., ${DAC_SDD_RUNTIME_DIR}) is started by installed Claude Code from the project root; unset variable => server does not connect', { skip: skipClaude }, () => {
+test('18. [REAL-CLAUDE] the bootstrap-generated portable config (relative script, --target ., no runtime-dir, no env) is started by installed Claude Code from the project root and connects on the automatic endpoint', { skip: skipClaude }, () => {
   const place = (rt) => { for (const [p, buf] of generateClaudeFiles({ sddHandoff: true }).files) { mkdirSync(join(rt.ws, p, '..'), { recursive: true }); writeFileSync(join(rt.ws, p), buf); } };
-  const rtDir = join(shortBase, `claude-rt-${n++}`); // only needs to be syntactically valid for startup; no custodian is contacted
-  const withVar = createRuntime({ extraEnv: { DAC_SDD_RUNTIME_DIR: rtDir } });
+  const rt = createRuntime();
   try {
-    assert.ok(verifySandbox(withVar).ok); place(withVar);
-    const { init, result } = claudeInit(withVar, ['--tools', '']); assert.ok(init, `no init event: ${result.stderr}`);
+    assert.ok(verifySandbox(rt).ok); place(rt);
+    const { init, result } = claudeInit(rt, ['--tools', '']); assert.ok(init, `no init event: ${result.stderr}`);
     const srv = init.mcp_servers.find((s) => s.name === SERVER_NAME); assert.equal(srv?.status, 'connected', JSON.stringify(init.mcp_servers));
     assert.deepEqual(init.tools.filter((x) => x.startsWith('mcp__')), [TOOL_PERMISSION]);
-    assert.ok(!existsSync(join(withVar.ws, '.sdd')) && !existsSync(rtDir), 'nothing created by startup');
-  } finally { withVar.dispose(); }
-  const noVar = createRuntime();
-  try {
-    place(noVar); const { init } = claudeInit(noVar, ['--tools', '']);
-    // fail closed: whichever way Claude reports the unresolved variable, the submit tool must not be available
-    assert.ok(!init || !init.tools.includes(TOOL_PERMISSION) || init.mcp_servers.find((s) => s.name === SERVER_NAME)?.status !== 'connected', 'unset DAC_SDD_RUNTIME_DIR must not yield a working proxy');
-  } finally { noVar.dispose(); }
+    assert.ok(!existsSync(join(rt.ws, '.sdd')), 'nothing created by startup');
+  } finally { rt.dispose(); }
+});
+
+// ---- 19-21 AUTOMATIC deterministic runtime directory (the normal path: no --runtime-dir, no environment variable) -----------------
+const dirStat = (mode, { uid = 501, dir = true, link = false } = {}) => ({ uid, mode, isDirectory: () => dir, isSymbolicLink: () => link });
+const fakeFs = (table) => ({ lstatSync: (p) => { if (!(p in table)) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return table[p]; } });
+const SAFE_ANCESTORS = { '/': dirStat(0o40755, { uid: 0 }), '/run': dirStat(0o40755, { uid: 0 }), '/run/user': dirStat(0o40755, { uid: 0 }) };
+test('19. [UNIT] automatic runtime dir: macOS /private/tmp/dac-sdd-<uid>; Linux safe /run/user/<uid>/dac-sdd else /tmp/dac-sdd-<uid>; invalid uid/platform and unsafe override rejected; byte-based socket limit', () => {
+  const u = process.getuid();
+  assert.equal(automaticRuntimeDir({ platform: 'darwin', uid: 501 }), '/private/tmp/dac-sdd-501');
+  assert.equal(resolveRuntimeDir(undefined, { platform: 'darwin', uid: 0 }), '/private/tmp/dac-sdd-0');
+  const safe = fakeFs({ ...SAFE_ANCESTORS, '/run/user/501': dirStat(0o40700) });
+  assert.equal(automaticRuntimeDir({ platform: 'linux', uid: 501, fs: safe }), '/run/user/501/dac-sdd');
+  assert.equal(resolveRuntimeDir(undefined, { platform: 'linux', uid: 501, fs: safe }), '/run/user/501/dac-sdd');
+  const unsafe = {
+    'missing /run/user/<uid>': fakeFs(SAFE_ANCESTORS),
+    'symlink': fakeFs({ ...SAFE_ANCESTORS, '/run/user/501': dirStat(0o120700, { link: true }) }),
+    'not a directory': fakeFs({ ...SAFE_ANCESTORS, '/run/user/501': dirStat(0o100600, { dir: false }) }),
+    'foreign owner': fakeFs({ ...SAFE_ANCESTORS, '/run/user/501': dirStat(0o40700, { uid: 502 }) }),
+    'group/world accessible': fakeFs({ ...SAFE_ANCESTORS, '/run/user/501': dirStat(0o40750) }),
+    'world-writable ancestor': fakeFs({ ...SAFE_ANCESTORS, '/run/user': dirStat(0o40777, { uid: 0 }), '/run/user/501': dirStat(0o40700) }),
+    'foreign-owned ancestor': fakeFs({ ...SAFE_ANCESTORS, '/run': dirStat(0o40755, { uid: 502 }), '/run/user/501': dirStat(0o40700) }),
+    'symlinked ancestor': fakeFs({ ...SAFE_ANCESTORS, '/run': dirStat(0o120755, { uid: 0, link: true }), '/run/user/501': dirStat(0o40700) }),
+  };
+  for (const [why, fs] of Object.entries(unsafe)) assert.equal(automaticRuntimeDir({ platform: 'linux', uid: 501, fs }), '/tmp/dac-sdd-501', `fallback: ${why}`);
+  for (const bad of [-1, 1.5, NaN, '501', null]) assert.throws(() => automaticRuntimeDir({ platform: 'darwin', uid: bad }), { code: 'HANDOFF_ENDPOINT' }, `uid ${String(bad)}`);
+  for (const p of ['win32', 'freebsd']) { assert.throws(() => automaticRuntimeDir({ platform: p, uid: 1 }), { code: 'HANDOFF_PLATFORM' }); assert.throws(() => resolveRuntimeDir(undefined, { platform: p, uid: 1 }), { code: 'HANDOFF_PLATFORM' }); }
+  // advanced override must be explicit, absolute and normalized
+  for (const bad of ['', 'rel/dir', '/a/../b', '/a//b', '/a/b/', '/', '/a\0b', 5, null, {}]) assert.throws(() => resolveRuntimeDir(bad), { code: 'HANDOFF_ENDPOINT' }, `override ${JSON.stringify(bad)}`);
+  assert.equal(resolveRuntimeDir('/tmp/x'), '/tmp/x');
+  const spacedOverride = '/tmp/dac sdd advanced override';
+  assert.equal(resolveRuntimeDir(spacedOverride), spacedOverride, 'a normalized absolute advanced override may contain spaces');
+  assert.ok(Buffer.byteLength(socketPath(spacedOverride, ident(fresh('target with spaces')))) <= 100, 'a spaced override still obeys the byte-based socket limit');
+  // the socket limit is in BYTES, not characters: fewer than 60 characters but more than 80 bytes
+  const wide = `/tmp/${'é'.repeat(40)}`; assert.ok(wide.length < 60 && Buffer.byteLength(wide) > 80);
+  assert.throws(() => resolveRuntimeDir(wide), { code: 'HANDOFF_ENDPOINT' }); assert.throws(() => socketPath(wide, ident(fresh('target'))), { code: 'HANDOFF_ENDPOINT' });
+  assert.equal(resolveRuntimeDir(), automaticRuntimeDir()); assert.ok([`/private/tmp/dac-sdd-${u}`, `/run/user/${u}/dac-sdd`, `/tmp/dac-sdd-${u}`].includes(resolveRuntimeDir()));
+  assert.ok(Buffer.byteLength('/private/tmp/dac-sdd-4294967295') + 29 <= 100, 'the largest uid still fits the socket path');
+});
+
+test('20. [PROC] automatic runtime dir is independent of TMPDIR, HOME, cwd and any DAC_* variable (every process computes the same endpoint)', () => {
+  const probe = (o) => spawnSync(process.execPath, ['--input-type=module', '-e', `import { resolveRuntimeDir } from ${JSON.stringify(join(REPO_ROOT, 'adapters/shared/sdd-handoff/endpoint.mjs'))}; process.stdout.write(resolveRuntimeDir());`], { encoding: 'utf8', cwd: o.cwd, env: { PATH: process.env.PATH, ...o.env } }).stdout;
+  const expected = resolveRuntimeDir();
+  for (const o of [{ cwd: fresh('cwd'), env: { TMPDIR: fresh('tmp'), HOME: fresh('home') } }, { cwd: '/', env: { TMPDIR: '/var/tmp', DAC_SDD_RUNTIME_DIR: fresh('bogus'), DAC_SDD_HANDOFF_DIR: fresh('bogus2'), XDG_RUNTIME_DIR: fresh('xdg') } }, { cwd: fresh('cwd'), env: {} }]) assert.equal(probe(o), expected);
+  const src = readFileSync(join(REPO_ROOT, 'adapters/shared/sdd-handoff/endpoint.mjs'), 'utf8').split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
+  assert.ok(!/process\.env|tmpdir|homedir|process\.cwd|XDG_RUNTIME_DIR/.test(src), 'no environment, tmpdir, home-directory or cwd input in the resolution code');
+});
+
+test('21. [PROC] automatic lifecycle, no --runtime-dir anywhere: custodian (TMPDIR A) -> MCP (TMPDIR C) -> writer plan (TMPDIR B) -> status/stop; private modes; metadata/socket cleaned', async () => {
+  const target = fresh('target'); const auto = resolveRuntimeDir(); const [A, B, C] = [fresh('tmpA'), fresh('tmpB'), fresh('tmpC')];
+  assert.equal((await custCli(['status', '--target', target, '--json'], undefined, { tmp: A })).status, 1, 'not running before start');
+  assert.equal((await custCli(['stop', '--target', target], undefined, { tmp: A })).status, 0, 'stop of an absent custodian is a clean no-op');
+  const cu = spawnCustodian(target, undefined, { tmp: A, cwd: fresh('cwdA') }); await cu.ready;
+  assert.ok(cu.err().includes(auto), 'the custodian announces the automatic endpoint');
+  const st = lstatSync(auto); assert.ok(st.isDirectory() && !st.isSymbolicLink() && st.uid === process.getuid() && (st.mode & 0o777) === 0o700, 'automatic dir is ours, real, 0700');
+  assert.equal(lstatSync(socketPath(auto, ident(target))).mode & 0o777, 0o600); assert.ok(lstatSync(socketPath(auto, ident(target))).isSocket());
+  const m = startMcp(target, undefined, { tmp: C, cwd: fresh('cwdC') }); await m.init();
+  const sub = await m.submit(envelope()); assert.equal(sub.isError, false, JSON.stringify(sub.body)); const id = sub.body.handoff_id;
+  assert.ok(!sub.body.human_commands.plan.includes('--runtime-dir') && !sub.body.human_commands.apply.includes('--runtime-dir'), 'human commands need nothing but --target/--handoff');
+  const before = snapshot(target);
+  const p = await runNode(clone().cli, ['plan', '--target', target, '--handoff', id, '--json'], undefined, { tmp: B, cwd: fresh('cwdB') }); assert.equal(p.status, 0, p.stdout + p.stderr);
+  assert.equal(JSON.parse(p.stdout).plan_digest, sub.body.plan_digest); assert.deepEqual(snapshot(target), before); noSdd(target);
+  const sj = JSON.parse((await custCli(['status', '--target', target, '--json'], undefined, { tmp: B })).stdout); assert.equal(sj.state, 'running'); assert.equal(sj.pid, cu.p.pid); assert.equal(sj.live_handoffs, 1);
+  // an explicit override is a different endpoint: it does not see this custodian
+  assert.equal((await custCli(['status', '--target', target], freshDir(), { tmp: A })).status, 1);
+  m.child.stdin.end(); await m.exited;
+  assert.equal((await custCli(['stop', '--target', target], undefined, { tmp: B })).status, 0); assert.equal((await cu.exited).code, 0);
+  assert.deepEqual(readdirSync(auto).filter((f) => f.includes(endpointKey(ident(target)))), [], 'socket and metadata removed');
+  assert.equal((await custCli(['status', '--target', target], undefined)).status, 1);
 });

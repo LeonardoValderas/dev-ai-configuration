@@ -1,6 +1,7 @@
 // Client for the custodian (used by the writer CLI, the custodian CLI and the stateless MCP proxy).
 // Fails closed: any endpoint/custodian problem is an error before anything is written.
 import net from 'node:net';
+import { lstatSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { parseHandoffId, HandoffError, sameTarget, MAX_ENVELOPE_BYTES } from './core.mjs';
 import { resolveRuntimeDir, socketPath, assertPrivateDir, assertPrivateSocket, readMetadata, assertSocketMatchesMetadata } from './endpoint.mjs';
@@ -9,10 +10,11 @@ import { targetIdentity } from './identity.mjs';
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const MAX_RESPONSE = MAX_ENVELOPE_BYTES * 8; // JSON string-escaping headroom
 
-// Discovery: explicit runtime dir (trusted flag, never env/tmpdir) -> validated metadata -> socket whose inode must equal the
+// Discovery: automatic deterministic runtime dir (platform + uid only; never env/tmpdir/cwd; optional trusted override) -> validated metadata -> socket whose inode must equal the
 // recorded one -> connect -> the live custodian must confirm the same instance and target before any request is sent.
 async function connect(identity, { dir } = {}) {
   dir = resolveRuntimeDir(dir);
+  try { lstatSync(dir); } catch (e) { if (e?.code === 'ENOENT') throw new HandoffError('HANDOFF_UNAVAILABLE', 'handoff custodian is not running (no runtime directory)'); }
   assertPrivateDir(dir);
   const meta = readMetadata(dir, identity);
   if (!meta) throw new HandoffError('HANDOFF_UNAVAILABLE', 'handoff custodian is not running (no endpoint metadata)');

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Minimal MCP stdio server (JSON-RPC 2.0, newline-delimited) exposing exactly one tool: sdd_handoff_submit.
-// The target and the runtime directory are fixed by startup config (--target <dir> --runtime-dir <abs>); neither is a tool argument
-// nor read from the environment.
+// The target is fixed by startup config (--target <dir>); the endpoint directory is resolved automatically from platform + uid
+// (endpoint.mjs), identical to the custodian's and the Writer's. Neither is a tool argument nor read from the environment/TMPDIR/cwd.
+// `--runtime-dir <abs>` is an optional advanced/test override (never generated).
 // STATELESS PROXY to the independent, human-started custodian (handoffs outlive this process). There is no apply tool: approval and
 // writing happen only in the writer CLI, on the human's /dev/tty. Payload is untrusted data: only parsed as JSON
 // and validated by the existing writer plan(); nothing from it is executed or interpolated into commands.
@@ -50,7 +51,8 @@ const SERVER = IN_CHECKOUT ? sibling('./custodian-cli.mjs') : '<DAC_CHECKOUT>/ad
 // Stateless proxy: no store, no persistent connection, nothing retained between calls. Every call derives the endpoint
 // from the fixed target and forwards to the human-started custodian, which validates (existing writer plan()) and holds.
 export function createServer({ target, runtimeDir, submit = submitHandoff }) {
-  const dir = resolveRuntimeDir(runtimeDir); // fixed by startup config
+  const dir = resolveRuntimeDir(runtimeDir); // automatic unless an explicit override was configured
+  const rt = runtimeDir === undefined ? '' : ` --runtime-dir ${shq(dir)}`; // human commands carry the override only when one is in use
   const targetPath = targetIdentity(target).realpath; // fixed by startup config; never a tool argument
 
   async function doSubmit(args) {
@@ -60,14 +62,14 @@ export function createServer({ target, runtimeDir, submit = submitHandoff }) {
     if (size > MAX_ENVELOPE_BYTES) throw new HandoffError('HANDOFF_TOO_LARGE', `envelope exceeds ${MAX_ENVELOPE_BYTES} bytes`);
     let h;
     try { h = await submit(targetPath, JSON.parse(JSON.stringify(args)), { dir }); } catch (e) {
-      if (e?.code === 'HANDOFF_UNAVAILABLE') { const x = new HandoffError('CUSTODIAN_UNAVAILABLE', `no handoff custodian is running for this target; the human must start it: node ${shq(SERVER)} start --target ${shq(targetPath)} --runtime-dir ${shq(dir)}`); throw x; }
+      if (e?.code === 'HANDOFF_UNAVAILABLE') { const x = new HandoffError('CUSTODIAN_UNAVAILABLE', `no handoff custodian is running for this target; the human must start it: node ${shq(SERVER)} start --target ${shq(targetPath)}${rt}`); throw x; }
       throw e;
     }
     return {
       handoff_id: h.handoff_id, status: h.status, plan_digest: h.plan_digest, would_write: h.would_write, files_changed: [],
       expires_at: h.expires_at,
       // Built only from the fixed target and the opaque id; never from payload text.
-      human_commands: { plan: `node ${shq(CLI)} plan --target ${shq(targetPath)} --runtime-dir ${shq(dir)} --handoff ${h.handoff_id}`, apply: `node ${shq(CLI)} apply --target ${shq(targetPath)} --runtime-dir ${shq(dir)} --handoff ${h.handoff_id}` },
+      human_commands: { plan: `node ${shq(CLI)} plan --target ${shq(targetPath)}${rt} --handoff ${h.handoff_id}`, apply: `node ${shq(CLI)} apply --target ${shq(targetPath)}${rt} --handoff ${h.handoff_id}` },
       note: 'Not approved. Writing requires the human to run the apply command and confirm on the terminal.',
     };
   }
@@ -120,13 +122,13 @@ export function serveStdio(server, { input = process.stdin, output = process.std
 }
 
 async function main(argv) {
-  let target; let runtimeDir; const usage = 'Usage: mcp-server.mjs --target <dir> --runtime-dir <absolute dir>';
+  let target; let runtimeDir; const usage = 'Usage: mcp-server.mjs --target <dir> [--runtime-dir <absolute dir>]';
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--target' && argv[i + 1] && target === undefined) target = resolve(argv[++i]);
     else if (argv[i] === '--runtime-dir' && argv[i + 1] && runtimeDir === undefined) runtimeDir = argv[++i];
     else { console.error(usage); return 2; }
   }
-  if (!target || runtimeDir === undefined) { console.error(usage); return 2; }
+  if (!target) { console.error(usage); return 2; }
   let server;
   try { server = await createServer({ target, runtimeDir }); } catch (e) { console.error(`sdd-handoff: cannot start (${e.code ?? 'FAILURE'}: ${e.message})`); return 1; }
   const shutdown = () => process.exit(0); // nothing to clean: the proxy holds no state; handoffs live in the custodian

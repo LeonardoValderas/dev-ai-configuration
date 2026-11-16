@@ -12,12 +12,49 @@ export const META_VERSION = 1;
 const META_SCHEMA = 'dac-sdd-handoff-endpoint';
 const MAX_META_BYTES = 4096;
 
-// The runtime directory is NEVER derived from any temp-dir setting, the working directory or the process environment: the human supplies an absolute,
-// normalized path (custodian --runtime-dir, and the same trusted flag in the MCP server args / writer command). It is not a tool argument.
-export function resolveRuntimeDir(value) {
-  if (process.platform !== 'darwin' && process.platform !== 'linux') throw new HandoffError('HANDOFF_PLATFORM', 'unsupported platform (macOS/Linux only)');
-  if (typeof value !== 'string' || value === '' || value.includes('\0') || !isAbsolute(value) || value !== resolve(value) || value === sep) throw new HandoffError('HANDOFF_ENDPOINT', 'runtime directory must be an explicit, normalized absolute path chosen by the human (--runtime-dir)');
-  return value;
+// ---- runtime directory resolution ---------------------------------------------------------------------------------
+// The runtime directory is resolved AUTOMATICALLY and deterministically from the platform and the real UID only. It is never derived from
+// any temp-dir setting, HOME, the working directory or any environment variable, so the custodian, the MCP proxy and the Writer (started
+// from different shells, cwds and sandboxes) always compute the same endpoint:
+//   macOS : /private/tmp/dac-sdd-<uid>      (the real path of the /tmp symlink; the symlink itself is never used)
+//   Linux : /run/user/<uid>/dac-sdd         when /run/user/<uid> is a safe private directory (ancestors safe), otherwise /tmp/dac-sdd-<uid>
+// Resolution only computes the path. Every component is validated on use (assertPrivateDir / ensurePrivateDir): real directories, owner
+// root-or-us, no unsafe writable ancestor, final directory ours with mode 0700, never repaired when foreign.
+// An explicit absolute, normalized path stays accepted as an advanced/test override (custodian/writer --runtime-dir); no generated
+// configuration uses it and it is never a model/tool argument.
+const SOCKET_NAME_BYTES = 'h2-'.length + 20 + '.sock'.length; // h2-<20 hex>.sock
+const platformOk = (p) => p === 'darwin' || p === 'linux';
+
+function safeRunUserDir(path, u, fsx) {
+  try {
+    const st = fsx.lstatSync(path);
+    if (st.isSymbolicLink() || !st.isDirectory() || st.uid !== u || (st.mode & 0o077) !== 0) return false;
+    for (let p = dirname(path); ; p = dirname(p)) {
+      const a = fsx.lstatSync(p);
+      if (a.isSymbolicLink() || !a.isDirectory() || (a.uid !== 0 && a.uid !== u) || ((a.mode & 0o022) !== 0 && (a.mode & 0o1000) === 0)) return false;
+      if (p === dirname(p)) break;
+    }
+    return true;
+  } catch { return false; }
+}
+
+// platform/uid/fs are injectable for tests only; production callers pass nothing.
+export function automaticRuntimeDir({ platform = process.platform, uid: u = uid(), fs: fsx = { lstatSync } } = {}) {
+  if (!platformOk(platform)) throw new HandoffError('HANDOFF_PLATFORM', 'unsupported platform (macOS/Linux only)');
+  if (!Number.isInteger(u) || u < 0) throw new HandoffError('HANDOFF_ENDPOINT', 'cannot determine the current user id');
+  if (platform === 'darwin') return `/private/tmp/dac-sdd-${u}`;
+  return safeRunUserDir(`/run/user/${u}`, u, fsx) ? `/run/user/${u}/dac-sdd` : `/tmp/dac-sdd-${u}`;
+}
+
+// value === undefined => automatic. Otherwise an explicit, normalized absolute path (advanced override).
+export function resolveRuntimeDir(value, deps = {}) {
+  const platform = deps.platform ?? process.platform;
+  if (!platformOk(platform)) throw new HandoffError('HANDOFF_PLATFORM', 'unsupported platform (macOS/Linux only)');
+  let dir = value;
+  if (value === undefined) dir = automaticRuntimeDir({ ...deps, platform });
+  else if (typeof value !== 'string' || value === '' || value.includes('\0') || !isAbsolute(value) || value !== resolve(value) || value === sep) throw new HandoffError('HANDOFF_ENDPOINT', 'runtime directory override must be a normalized absolute path');
+  if (Buffer.byteLength(dir) + 1 + SOCKET_NAME_BYTES > MAX_SOCKET_PATH) throw new HandoffError('HANDOFF_ENDPOINT', 'socket path is too long');
+  return dir;
 }
 export const socketPath = (dir, identity) => {
   const p = join(dir, `h2-${endpointKey(identity)}.sock`);

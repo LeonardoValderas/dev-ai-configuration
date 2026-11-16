@@ -20,6 +20,7 @@ import * as cursor from '../adapters/cursor/lib/apply.mjs';
 
 export const PROVIDERS = ['claude-code', 'codex', 'cursor'];
 const SHARED_PROVIDERS = ['codex', 'cursor']; // owners of the neutral AGENTS.md
+const HANDOFF_PROVIDERS = ['claude-code', 'codex']; // providers that can own the SDD handoff runtime (never cursor)
 export const STANDARD_PATH = '.dac/standard.json';
 export const SHARED_PATH = '.dac/shared.json';
 const INSTALLERS = { 'claude-code': claude, codex, cursor };
@@ -52,7 +53,7 @@ function parseStandard(v) {
   const providers = {};
   for (const p of sortStr(Object.keys(v.providers))) {
     const r = v.providers[p];
-    const withHandoff = p === 'claude-code' && r && r.sdd_handoff !== undefined; // optional, claude-code only, only ever `true`
+    const withHandoff = HANDOFF_PROVIDERS.includes(p) && r && r.sdd_handoff !== undefined; // optional, claude-code/codex only, only ever `true`
     if (!PROVIDERS.includes(p) || !exactKeys(r, withHandoff ? ['adapter_version', 'context7', 'optional_agents', 'sdd_handoff'] : ['adapter_version', 'context7', 'optional_agents']) || typeof r.adapter_version !== 'string' || typeof r.context7 !== 'boolean' || !Array.isArray(r.optional_agents) || r.optional_agents.some((a) => typeof a !== 'string') || (withHandoff && r.sdd_handoff !== true)) bad('standard record has invalid provider entry');
     providers[p] = { adapter_version: r.adapter_version, context7: r.context7, optional_agents: sortStr(r.optional_agents), ...(withHandoff ? { sdd_handoff: true } : {}) };
   }
@@ -76,7 +77,7 @@ function optionsFromManifest(p, m) {
     const defaults = selectAgents(JSON.parse(readFileSync(resolve(REPO_ROOT, 'standards/manifests/agents/agent-catalog.json'), 'utf8')));
     return { context7: m.context7_enabled === true, optionalAgents: sortStr(m.agents.filter((a) => !defaults.includes(a))), sddHandoff: m.sdd_handoff === true };
   }
-  return { context7: m.context7_template === true, optionalAgents: [], sddHandoff: false };
+  return { context7: m.context7_template === true, optionalAgents: [], sddHandoff: p === 'codex' && m.sdd_handoff === true };
 }
 
 function readState(root) {
@@ -121,7 +122,7 @@ const act = (op, path, buf, previous) => ({ op, path, ...(buf ? { buf } : {}), .
 function genProvider(p, o) {
   if (p === 'claude-code') return generateClaude({ context7: o.context7, optionalAgents: o.optionalAgents, sddHandoff: o.sddHandoff === true });
   if (o.optionalAgents.length) throw new AdapterError('OPTIONS', 'optional agents are only supported for claude-code');
-  return generatePortable(p, { context7: o.context7, neutralAgents: true });
+  return generatePortable(p, { context7: o.context7, neutralAgents: true, ...(p === 'codex' ? { sddHandoff: o.sddHandoff === true } : {}) });
 }
 
 // A record file (standard.json / shared.json) is owned entirely by the bootstrap and rewritten canonically.
@@ -186,7 +187,7 @@ function compose(root, state, src, finalSet, optionsFor, { requireSameCommit }) 
       }
       actions.push(...acts);
       conflicts.push(...r.conflicts);
-      providerRecords[p] = { adapter_version: plan.manifest.adapter_version, context7: optionsFor(p).context7, optional_agents: sortStr(optionsFor(p).optionalAgents), ...(p === 'claude-code' && optionsFor(p).sddHandoff ? { sdd_handoff: true } : {}) };
+      providerRecords[p] = { adapter_version: plan.manifest.adapter_version, context7: optionsFor(p).context7, optional_agents: sortStr(optionsFor(p).optionalAgents), ...(HANDOFF_PROVIDERS.includes(p) && optionsFor(p).sddHandoff ? { sdd_handoff: true } : {}) };
     }
   }
   const shared = planSharedAgents(root, state, finalSet, claimed);
@@ -249,9 +250,16 @@ const norm = (o = {}) => ({ context7: o.context7 === true, optionalAgents: sortS
 const pick = (actions, op) => actions.filter((a) => a.op === op).map((a) => a.path);
 const summarize = (status, actions, conflicts, src, finalSet) => ({ status, conflicts, created: pick(actions, 'create'), updated: pick(actions, 'update'), removed: pick(actions, 'remove'), unchanged: pick(actions, 'unchanged'), standard: { version: src.version, commit: src.head }, providers: finalSet });
 
-// The handoff runtime exists for Claude Code only; asking for it without claude-code is an error, never a silent no-op.
+// The handoff runtime exists for Claude Code and Codex only; asking for it without one of them is an error, never a silent no-op.
+// The flag applies to the handoff-capable providers requested; Cursor never receives it. Both providers would own the same
+// .dac/runtime/sdd-handoff files, so one project carries the runtime for exactly one provider.
 function checkHandoff(requested, opts) {
-  if (opts.sddHandoff && !requested.includes('claude-code')) throw new AdapterError('OPTIONS', 'the SDD handoff runtime is only supported for claude-code');
+  if (opts.sddHandoff && !requested.some((p) => HANDOFF_PROVIDERS.includes(p))) throw new AdapterError('OPTIONS', 'the SDD handoff runtime is only supported for claude-code and codex');
+  if (opts.sddHandoff && requested.filter((p) => HANDOFF_PROVIDERS.includes(p)).length > 1) throw new AdapterError('OPTIONS', 'the SDD handoff runtime can be installed for only one provider at a time');
+}
+const forProvider = (p, opts) => ({ ...opts, sddHandoff: opts.sddHandoff && HANDOFF_PROVIDERS.includes(p) });
+function checkSingleOwner(finalSet, optionsFor) {
+  if (finalSet.filter((p) => HANDOFF_PROVIDERS.includes(p) && optionsFor(p).sddHandoff).length > 1) throw new AdapterError('OPTIONS', 'the SDD handoff runtime is already installed for another provider in this project; remove it there first (one owner of .dac/runtime/sdd-handoff)');
 }
 
 function checkProviders(list) {
@@ -289,7 +297,8 @@ export function apply({ target, providers, options = {}, dryRun = false, faultAf
   const finalSet = sortStr(new Set([...state.installed, ...requested]));
   const opts = norm(options);
   checkHandoff(requested, opts);
-  const optionsFor = (p) => (requested.includes(p) ? opts : state.providers.get(p).options);
+  const optionsFor = (p) => (requested.includes(p) ? forProvider(p, opts) : state.providers.get(p).options);
+  checkSingleOwner(finalSet, optionsFor);
   const plan = compose(root, state, src, finalSet, optionsFor, { requireSameCommit: true });
   // pruneDirs only removes directories emptied by this transaction's managed removals (e.g. disabling the handoff runtime).
   return commit(root, src, state, plan, finalSet, { dryRun, faultAfter, hooks, pruneDirs: true, okStatus: 'APPLIED' });
@@ -318,7 +327,7 @@ export function plan({ providers, options = {}, target = null }) {
   const opts = norm(options);
   checkHandoff(requested, opts);
   const files = {};
-  for (const p of requested) files[p] = [...genProvider(p, opts).files.keys()];
+  for (const p of requested) files[p] = [...genProvider(p, forProvider(p, opts)).files.keys()];
   const sharedOwners = requested.filter((p) => SHARED_PROVIDERS.includes(p));
   const out = { standard: { version: src.version, commit: src.head }, files, shared: sharedOwners.length ? [{ path: SHARED_AGENTS_PATH, owners: sharedOwners }] : [], records: [STANDARD_PATH, ...(sharedOwners.length ? [SHARED_PATH] : [])] };
   if (target) out.target = apply({ target, providers: requested, options, dryRun: true });
@@ -358,11 +367,13 @@ Commands:
   verify --target <dir>                       Check integrity and drift (no writes)
   update --target <dir>                       Explicitly move installed providers to this checkout's standard
   uninstall --provider <p> --target <dir>     Remove one provider; shared AGENTS.md is kept while another owner remains
+  handoff <start|status|stop> --target <dir>  Operate the human-started SDD handoff custodian (foreground start; automatic endpoint)
 Providers: ${PROVIDERS.join(', ')} (repeat --provider or comma-separate)
 Options:
   --context7               Opt in to the Context7 template for the provider(s) being applied (off by default)
   --optional-agent <id>    claude-code only: also generate an optional catalog agent
-  --sdd-handoff            claude-code only: install the SDD input-handoff runtime (.dac/runtime/sdd-handoff, submit-only MCP proxy, .mcp.json)
+  --sdd-handoff            claude-code or codex (one provider per project): install the SDD input-handoff runtime
+                           (.dac/runtime/sdd-handoff, submit-only MCP proxy; .mcp.json for claude-code, .codex/config.toml entry for codex)
   --dry-run                Report actions without writing
   --json                   Machine-readable output
 Requires this checkout to be a clean Git repository with a verifiable HEAD.`;
@@ -416,4 +427,20 @@ function main(argv) {
   }
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv.slice(2));
+// `handoff <start|status|stop> --target <dir>`: thin facade over the independent, human-operated custodian CLI. No environment variable and
+// no runtime path to type: the endpoint is resolved automatically (platform + uid). `start` runs in the foreground (Ctrl-C stops it).
+// It does not touch the project or the standard (no Git source gate needed) and adds no option the custodian CLI does not already have.
+async function handoffMain(argv) {
+  const [, sub, ...rest] = argv;
+  if (!['start', 'status', 'stop'].includes(sub) || rest.length < 2 || rest[0] !== '--target' || !rest[1] || rest.slice(2).some((a) => a !== '--json')) {
+    console.error('Usage: node installer/bootstrap.mjs handoff <start|status|stop> --target <dir> [--json]');
+    return 2;
+  }
+  const { main: custodian } = await import('../adapters/shared/sdd-handoff/custodian-cli.mjs');
+  return custodian([sub, ...rest]);
+}
+
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  if (process.argv[2] === 'handoff') { const code = await handoffMain(process.argv.slice(2)); if (code !== null) process.exitCode = code; } // null: `start` keeps running
+  else process.exitCode = main(process.argv.slice(2));
+}

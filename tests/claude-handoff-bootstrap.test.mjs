@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { REPO_ROOT } from '../installer/lib/run.mjs';
 import { startCustodian } from '../adapters/shared/sdd-handoff/custodian.mjs';
 import { withLease } from '../adapters/shared/sdd-handoff/client.mjs';
+import { resolveRuntimeDir } from '../adapters/shared/sdd-handoff/endpoint.mjs';
 import { plan as writerPlan, apply as writerApply, verify as writerVerify } from '../adapters/shared/sdd-writer/writer.mjs';
 import { targetIdentity as fullIdentity, endpointKey as fullKey } from '../adapters/shared/sdd-handoff/identity.mjs';
 import { targetIdentity as portableIdentity, endpointKey as portableKey } from '../adapters/shared/sdd-handoff/identity-portable.mjs';
@@ -160,10 +161,11 @@ test('[BOOT] scope: Codex/Cursor are never touched or wired; a handoff request w
   for (const p of ['codex', 'cursor']) { const man = readJ(t, `.${p}/dac-manifest.json`); assert.ok(!JSON.stringify(man).includes('sdd_handoff') && !JSON.stringify(man).includes('sdd-handoff')); }
   for (const f of Object.keys(snapshot(t))) if ((f.startsWith('.codex/') || f.startsWith('.cursor/') || f === 'AGENTS.md') && !lstatSync(join(t, f)).isDirectory()) assert.ok(!/sdd[-_]handoff/i.test(read(t, f)), `${f} has no handoff wiring`);
   assert.equal(s.api.verify({ target: t }).status, 'OK');
-  for (const bad of [() => s.api.apply({ target: target(), providers: ['codex'], options: { sddHandoff: true } }), () => s.api.plan({ providers: ['cursor'], options: { sddHandoff: true } })]) assert.throws(bad, { code: 'OPTIONS' });
+  // Cursor can never receive the runtime (Codex support is covered by tests/codex-handoff-bootstrap.test.mjs)
+  for (const bad of [() => s.api.apply({ target: target(), providers: ['cursor'], options: { sddHandoff: true } }), () => s.api.plan({ providers: ['cursor'], options: { sddHandoff: true } })]) assert.throws(bad, { code: 'OPTIONS' });
   assert.equal(s.cli(['update', '--target', t, '--sdd-handoff']).status, 2);
-  // the adapter-level source of Codex/Cursor never mentions the handoff
-  for (const d of ['adapters/codex', 'adapters/cursor']) assert.equal(spawnSync('grep', ['-rli', 'handoff', join(REPO_ROOT, d)], { encoding: 'utf8' }).stdout.trim(), '');
+  // the adapter-level source of Cursor never mentions the handoff
+  for (const d of ['adapters/cursor']) assert.equal(spawnSync('grep', ['-rli', 'handoff', join(REPO_ROOT, d)], { encoding: 'utf8' }).stdout.trim(), '');
   // uninstalling claude-code leaves codex/cursor exactly as they were
   assert.equal(s.api.uninstall({ target: t, provider: 'claude-code' }).status, 'REMOVED'); assert.deepEqual(snapshot(t), other);
 });
@@ -189,9 +191,9 @@ test('[UNIT] least privilege: only technical-planner gains the single submit too
 test('[UNIT] portability: generated/installed files contain no machine-specific absolute path, tmpdir, env endpoint or secret-shaped value', async () => {
   const s = await source(); const t = target(); claudeApply(s, t, { context7: true });
   const bad = /\/(Users|home|private|var\/folders|tmp)\/|os\.tmpdir|tmpdir\(|DAC_SDD_HANDOFF_DIR|process\.env|process\.cwd|[A-Za-z]:\\\\/;
-  for (const f of Object.keys(snapshot(t))) { if (lstatSync(join(t, f)).isDirectory()) continue; const txt = read(t, f); if (f.startsWith('.dac/runtime') || f === '.mcp.json' || f === '.claude/settings.json' || f === '.claude/dac-manifest.json' || f === '.dac/standard.json') assert.ok(!bad.test(txt), `${f}: machine-specific content`); }
+  for (const f of Object.keys(snapshot(t))) { if (lstatSync(join(t, f)).isDirectory()) continue; let txt = read(t, f); if (f.endsWith('/endpoint.mjs')) txt = txt.replace(/\/private\/tmp\/dac-sdd-|\/tmp\/dac-sdd-|\/run\/user\//g, ''); /* the deterministic endpoint constants are the only allowed absolute paths */ if (f.startsWith('.dac/runtime') || f === '.mcp.json' || f === '.claude/settings.json' || f === '.claude/dac-manifest.json' || f === '.dac/standard.json') assert.ok(!bad.test(txt), `${f}: machine-specific content`); }
   assert.ok(!read(t, '.mcp.json').includes(t) && !read(t, '.mcp.json').includes(shortBase));
-  const mcp = readJ(t, '.mcp.json').mcpServers[SERVER_NAME]; assert.deepEqual(mcp.args.slice(0, 3), ['.dac/runtime/sdd-handoff/mcp-server.mjs', '--target', '.']); assert.equal(mcp.args[4], '${DAC_SDD_RUNTIME_DIR}');
+  const mcp = readJ(t, '.mcp.json').mcpServers[SERVER_NAME]; assert.deepEqual(mcp.args.slice(0, 3), ['.dac/runtime/sdd-handoff/mcp-server.mjs', '--target', '.']); assert.equal(mcp.args.length, 3, 'no --runtime-dir and no environment placeholder in the generated config'); assert.ok(!read(t, '.mcp.json').includes('DAC_SDD_RUNTIME_DIR') && !read(t, '.mcp.json').includes('runtime-dir'));
 });
 
 // ---- 4 the installed runtime works with no manual sdd-input.json -------------------------------------------------------------
@@ -206,26 +208,25 @@ function startMcp(cwd, args, env = {}) {
 }
 
 test('[PROC] installed runtime end to end with no sdd-input.json: bootstrap -> custodian -> installed MCP from the project root -> submit -> Writer plan/apply (--handoff) -> verify; Writer never touches .dac/.claude', async () => {
-  const s = await source(); const t = realpathSync(target()); const rt = runtimeDir();
+  const s = await source(); const t = realpathSync(target()); const rt = resolveRuntimeDir(); // the deterministic automatic endpoint, exactly what the generated config uses
   assert.equal(claudeApply(s, t).status, 'APPLIED'); const installed = without(snapshot(t), '.sdd');
   assert.equal(existsSync(join(t, 'sdd-input.json')), false);
   const stub = ({ target, input }) => writerPlan({ target, input, source: () => ({ head: 'a'.repeat(40) }) });
   const c = await startCustodian({ target: t, dir: rt, writePlan: stub }); closers.push(() => c.close());
-  // exactly how Claude launches it: cwd = project root, project-relative script, relative --target, env-expanded --runtime-dir
-  const entry = readJ(t, '.mcp.json').mcpServers[SERVER_NAME]; assert.equal(entry.command, 'node');
-  const args = entry.args.map((a) => (a === '${DAC_SDD_RUNTIME_DIR}' ? rt : a));
-  const m = startMcp(t, args);
+  // exactly how Claude launches it: cwd = project root, project-relative script, relative --target; no runtime-dir/env; foreign HOME/TMPDIR
+  const entry = readJ(t, '.mcp.json').mcpServers[SERVER_NAME]; assert.equal(entry.command, 'node'); assert.equal(entry.args.length, 3);
+  const m = startMcp(t, entry.args, { TMPDIR: join(scratch, 'other-tmp') });
   const init = await m.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } }); assert.equal(init.result.serverInfo.name, 'dac-sdd-handoff');
   const tl = await m.rpc('tools/list', {}); assert.deepEqual(tl.result.tools.map((x) => x.name), ['sdd_handoff_submit']);
   const call = await m.rpc('tools/call', { name: 'sdd_handoff_submit', arguments: envelope() }); assert.equal(call.result.isError, false, JSON.stringify(call.result));
   const body = JSON.parse(call.result.content[0].text); assert.match(body.handoff_id, /^sdd-h2\./); assert.deepEqual(body.files_changed, []);
   assert.ok(body.human_commands.apply.includes('<DAC_CHECKOUT>') && !body.human_commands.apply.includes(REPO_ROOT), 'installed proxy prints a placeholder, not a machine path');
-  assert.ok(body.human_commands.apply.includes(`--target '${t}'`) && body.human_commands.apply.includes(`--runtime-dir '${rt}'`));
+  assert.ok(body.human_commands.apply.includes(`--target '${t}'`) && !body.human_commands.apply.includes('--runtime-dir'), 'automatic endpoint: nothing to type');
   assert.equal(existsSync(join(t, '.sdd')), false, 'submit writes nothing'); assert.deepEqual(without(snapshot(t), '.sdd'), installed);
   // Claude closes; payload survives in the custodian; the Writer applies it on a (stub) trusted terminal
   m.child.stdin.end(); await m.exited;
   const tty = { calls: 0, confirm() { this.calls++; return true; } };
-  const out = await withLease(body.handoff_id, t, (payload) => writerApply({ target: t, input: payload, source: () => ({ head: 'a'.repeat(40) }), terminal: tty }), { dir: rt, shouldConsume: (x) => x.status === 'APPLIED' });
+  const out = await withLease(body.handoff_id, t, (payload) => writerApply({ target: t, input: payload, source: () => ({ head: 'a'.repeat(40) }), terminal: tty }), { shouldConsume: (x) => x.status === 'APPLIED' });
   assert.equal(out.handoff.consumption, 'consumed'); assert.equal(tty.calls, 1);
   assert.equal(writerVerify({ target: t, projectId: PID }).status, 'OK');
   assert.deepEqual(without(snapshot(t), '.sdd'), installed, 'the Writer changed nothing outside .sdd (.dac and .claude byte-identical)');
@@ -234,7 +235,7 @@ test('[PROC] installed runtime end to end with no sdd-input.json: bootstrap -> c
   const sdd = only(snapshot(t), '.sdd'); assert.equal(s.api.verify({ target: t }).status, 'OK'); assert.equal(s.api.update({ target: t }).status, 'UNCHANGED');
   assert.equal(s.api.uninstall({ target: t, provider: 'claude-code' }).status, 'REMOVED'); assert.deepEqual(snapshot(t), sdd);
   // replay is impossible
-  assert.equal(await withLease(body.handoff_id, t, () => ({ status: 'APPLIED' }), { dir: rt }).catch((e) => e.code), 'HANDOFF_NOT_FOUND');
+  assert.equal(await withLease(body.handoff_id, t, () => ({ status: 'APPLIED' })).catch((e) => e.code), 'HANDOFF_NOT_FOUND');
 });
 
 test('[PROC] installed proxy is self-contained and fails closed: no standards checkout needed; unset env var, relative runtime dir and a missing custodian do not start/submit anything', async () => {
@@ -245,7 +246,12 @@ test('[PROC] installed proxy is self-contained and fails closed: no standards ch
   // the installed tree must not depend on the standards checkout: run it with a PATH-only env from a different cwd's project root
   const unexpanded = await startMcp(t, [mcp, '--target', '.', '--runtime-dir', '${DAC_SDD_RUNTIME_DIR}']).exited; assert.equal(unexpanded.code, 1, 'unexpanded variable => proxy refuses to start');
   const rel = await startMcp(t, [mcp, '--target', '.', '--runtime-dir', 'relative/dir']).exited; assert.equal(rel.code, 1);
-  const none = await startMcp(t, [mcp, '--target', '.']).exited; assert.equal(none.code, 2);
+  assert.equal((await startMcp(t, [mcp]).exited).code, 2, 'missing --target'); assert.equal((await startMcp(t, [mcp, '--target', '.', '--bogus']).exited).code, 2);
+  // no override at all: the proxy starts on the automatic endpoint and, with no custodian for this target, refuses to submit (it never hangs on startup)
+  const auto = startMcp(t, [mcp, '--target', '.']); await auto.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } });
+  const ar = await auto.rpc('tools/call', { name: 'sdd_handoff_submit', arguments: envelope() }); assert.equal(ar.result.isError, true);
+  const ab = JSON.parse(ar.result.content[0].text); assert.equal(ab.code, 'CUSTODIAN_UNAVAILABLE'); assert.ok(!ab.message.includes('--runtime-dir'));
+  auto.child.stdin.end(); await auto.exited;
   const rt = runtimeDir(); const m = startMcp(t, [mcp, '--target', '.', '--runtime-dir', rt]); await m.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } });
   const r = await m.rpc('tools/call', { name: 'sdd_handoff_submit', arguments: envelope() }); assert.equal(r.result.isError, true);
   const b = JSON.parse(r.result.content[0].text); assert.equal(b.code, 'CUSTODIAN_UNAVAILABLE'); assert.ok(b.message.includes('<DAC_CHECKOUT>')); assert.deepEqual(b.files_changed, []);
@@ -259,3 +265,64 @@ test('[UNIT] the installed identity variant derives exactly the same target iden
   assert.throws(() => portableIdentity(link), { code: 'TARGET' }); assert.throws(() => portableIdentity(join(d, 'missing')), { code: 'TARGET' });
   assert.deepEqual(portableIdentity(relative(process.cwd(), d)), a, 'relative targets resolve against the cwd (MCP launches in the project root)');
 });
+
+// ---- 5 `bootstrap handoff start|status|stop` facade (automatic endpoint; every wait is bounded so a regression fails instead of hanging) ----
+const bounded = (p, ms, what) => { let t; return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`timed out waiting for ${what}`)), ms); })]).finally(() => clearTimeout(t)); };
+const runCli = (script, args, env = {}) => new Promise((resolve) => { // async, bounded, stdin closed
+  const c = spawn(process.execPath, [script, ...args], { stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: scratch, ...env } }); children.push(c);
+  let stdout = ''; let stderr = ''; const k = setTimeout(() => c.kill('SIGKILL'), 20000);
+  c.stdout.on('data', (x) => { stdout += x; }); c.stderr.on('data', (x) => { stderr += x; }); c.on('close', (status) => { clearTimeout(k); resolve({ status, stdout, stderr }); });
+});
+
+test('[PROC] bootstrap handoff facade: usage errors; status/stop when nothing runs; start (foreground) -> status -> stop on the automatic endpoint, with foreign TMPDIR/cwd; writes nothing to the project', async () => {
+  const s = await source(); const t = realpathSync(target()); const boot = join(s.dir, 'installer/bootstrap.mjs'); const before = snapshot(t);
+  for (const a of [['handoff'], ['handoff', 'bogus', '--target', t], ['handoff', 'start'], ['handoff', 'start', '--target'], ['handoff', 'status', '--target', t, '--runtime-dir', '/tmp/x'], ['handoff', 'stop', '--target', t, '--provider', 'codex']]) assert.equal((await runCli(boot, a)).status, 2, a.join(' '));
+  assert.match((await runCli(boot, ['handoff', 'status', '--target', t])).stdout, /not running/); assert.equal((await runCli(boot, ['handoff', 'status', '--target', t])).status, 1);
+  assert.equal((await runCli(boot, ['handoff', 'stop', '--target', t])).status, 0, 'stop with nothing running is a no-op');
+  const child = spawn(process.execPath, [boot, 'handoff', 'start', '--target', t], { stdio: ['ignore', 'pipe', 'pipe'], cwd: fresh('cwd'), env: { PATH: process.env.PATH, HOME: scratch, TMPDIR: fresh('tmp') } }); children.push(child);
+  let err = ''; child.stderr.on('data', (x) => { err += x; }); const exited = new Promise((r) => child.once('close', (code) => r(code)));
+  await bounded(new Promise((resolve, reject) => { const i = setInterval(() => { if (/custodian started/.test(err)) { clearInterval(i); resolve(); } }, 20); child.once('close', () => { clearInterval(i); reject(new Error(`start exited early: ${err}`)); }); }), 15000, 'custodian start');
+  assert.ok(err.includes(resolveRuntimeDir()), 'announces the automatic endpoint');
+  const st = JSON.parse((await runCli(boot, ['handoff', 'status', '--target', t, '--json'], { TMPDIR: fresh('tmp2') })).stdout); assert.equal(st.state, 'running'); assert.equal(st.pid, child.pid);
+  assert.equal((await runCli(boot, ['handoff', 'start', '--target', t, '--json'])).status, 1, 'a second start for the same target is refused');
+  assert.equal((await runCli(boot, ['handoff', 'stop', '--target', t])).status, 0); assert.equal(await bounded(exited, 15000, 'custodian exit'), 0);
+  assert.equal((await runCli(boot, ['handoff', 'status', '--target', t])).status, 1);
+  assert.deepEqual(snapshot(t), before, 'the facade never writes to the project');
+});
+
+// ---- 6 migration: a project installed with the previous generated config (env placeholder / sh launcher) moves to the automatic config by `update` ----
+for (const provider of ['claude-code', 'codex']) {
+  test(`[BOOT] migration (${provider}): update replaces the previous handoff config; drift => zero writes; dry-run writes nothing; .sdd and unknown files preserved; idempotent`, async () => {
+    const s = await source(); const t = realpathSync(target());
+    // Reconstruct the previous generator output by patching the copied generators (each patch must match, so generator drift fails loudly).
+    const patch = (file, from, to) => s.change(file, (x) => { assert.ok(x.includes(from), `${file}: patch anchor`); return x.replace(from, to); }, `legacy ${file}`);
+    const cfgFile = provider === 'codex' ? 'adapters/shared/sdd-handoff/codex-config.mjs' : 'adapters/shared/sdd-handoff/claude-config.mjs';
+    if (provider === 'codex') {
+      patch(cfgFile, "command: 'node',\n  args: Object.freeze([`${RUNTIME_DIR}/mcp-server.mjs`, '--target', '.']),", "command: 'sh',\n  args: Object.freeze(['-c', `exec node ${RUNTIME_DIR}/mcp-server.mjs --target . --runtime-dir \"$DAC_SDD_RUNTIME_DIR\"`]),");
+      patch(cfgFile, "    'enabled = true',", "    'env_vars = [\"DAC_SDD_RUNTIME_DIR\"]',\n    'enabled = true',");
+    } else patch(cfgFile, "'--target', '.'] };", "'--target', '.', '--runtime-dir', '${DAC_SDD_RUNTIME_DIR}'] };");
+    s.change('adapters/shared/sdd-handoff/endpoint.mjs', (x) => `${x}// legacy runtime\n`, 'legacy endpoint');
+    const applied = JSON.parse(s.cli(['apply', '--provider', provider, '--sdd-handoff', '--target', t, '--json']).stdout); assert.equal(applied.status, 'APPLIED');
+    const managed = provider === 'codex' ? '.codex/config.toml' : '.mcp.json';
+    assert.ok(/DAC_SDD_RUNTIME_DIR/.test(read(t, managed)), 'previous config installed');
+    // project-owned content the migration must never touch
+    mkdirSync(join(t, '.sdd/specs'), { recursive: true }); writeFileSync(join(t, '.sdd/specs/keep.md'), 'project-owned\n'); mkdirSync(join(t, 'custom')); writeFileSync(join(t, 'custom/unknown.json'), '{"x":1}\n');
+    // restore the current generators (clean checkout again)
+    for (const f of [cfgFile, 'adapters/shared/sdd-handoff/endpoint.mjs']) s.change(f, () => readFileSync(join(template, f), 'utf8'), `current ${f}`);
+    const owned = only(snapshot(t), '.sdd'); const unknown = only(snapshot(t), 'custom'); const pre = snapshot(t);
+    // drift: a locally edited managed runtime file => update refuses, zero writes
+    const edited = join(t, `${RUNTIME_DIR}/client.mjs`); const orig = readFileSync(edited); writeFileSync(edited, Buffer.concat([orig, Buffer.from('// local edit\n')])); const drifted = snapshot(t);
+    const blocked = s.cli(['update', '--target', t, '--json']); assert.equal(blocked.status, 1); assert.equal(JSON.parse(blocked.stdout).status, 'CONFLICT'); assert.deepEqual(snapshot(t), drifted, 'conflict: zero writes');
+    writeFileSync(edited, orig); assert.deepEqual(snapshot(t), pre);
+    // dry-run: reports, writes nothing
+    const dry = JSON.parse(s.cli(['update', '--target', t, '--dry-run', '--json']).stdout); assert.equal(dry.status, 'DRY_RUN'); assert.deepEqual(snapshot(t), pre, 'dry-run writes nothing');
+    const up = s.cli(['update', '--target', t, '--json']); assert.equal(up.status, 0, up.stdout + up.stderr); assert.equal(JSON.parse(up.stdout).status, 'APPLIED');
+    const now = read(t, managed); assert.ok(!/DAC_SDD_RUNTIME_DIR|runtime-dir|env_vars|"sh"/.test(now), 'no env placeholder, runtime-dir, env forwarding or shell launcher after update');
+    if (provider === 'codex') assert.match(now, /command = "node"\nargs = \[".dac\/runtime\/sdd-handoff\/mcp-server.mjs", "--target", "."\]/); else assert.deepEqual(readJ(t, '.mcp.json').mcpServers[SERVER_NAME].args, ['.dac/runtime/sdd-handoff/mcp-server.mjs', '--target', '.']);
+    assert.ok(!read(t, `${RUNTIME_DIR}/endpoint.mjs`).includes('// legacy runtime'));
+    assert.deepEqual(only(snapshot(t), '.sdd'), owned); assert.deepEqual(only(snapshot(t), 'custom'), unknown);
+    assert.equal(JSON.parse(s.cli(['verify', '--target', t, '--json']).stdout).status, 'OK');
+    const post = snapshot(t); assert.equal(JSON.parse(s.cli(['update', '--target', t, '--json']).stdout).status, 'UNCHANGED'); assert.deepEqual(snapshot(t), post, 'idempotent');
+    assert.equal(JSON.parse(s.cli(['uninstall', '--provider', provider, '--target', t, '--json']).stdout).status, 'REMOVED'); assert.deepEqual(only(snapshot(t), '.sdd'), owned); assert.deepEqual(only(snapshot(t), 'custom'), unknown);
+  });
+}
