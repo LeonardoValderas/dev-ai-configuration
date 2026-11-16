@@ -2,7 +2,7 @@
 // Unix socket only (no network). Line-delimited JSON ops: submit | peek | lease | commit | release | cancel | status | stop.
 // The target is fixed at startup and is never selectable by a client. Nothing is ever written to disk except the
 // socket inode and a minimal non-payload discovery metadata file (target identity, socket inode, instance) in the
-// human-chosen runtime directory. Closing the custodian destroys every handoff.
+// automatically resolved private runtime directory (or an explicit advanced/test override). Closing the custodian destroys every handoff.
 import net from 'node:net';
 import { chmodSync, lstatSync, unlinkSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';

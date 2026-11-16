@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Human-operated custodian CLI. `start` runs in the FOREGROUND (Ctrl-C stops it and destroys every handoff).
-//   start  --target <dir> --runtime-dir <abs>  start the in-memory custodian for exactly this target
-//   status --target <dir> --runtime-dir <abs>  show liveness, instance, counts (no payload content)
-//   stop   --target <dir> --runtime-dir <abs>  stop a running custodian (or remove a verified stale socket)
-//   cancel --target <dir> --runtime-dir <abs> --handoff <id>  drop one handoff
-// --runtime-dir is an explicit absolute directory chosen by the human (no tmpdir/env/cwd default); the MCP server and the
-// writer must be given the same one by the human/bootstrap config.
+//   start  --target <dir>  start the in-memory custodian for exactly this target
+//   status --target <dir>  show liveness, instance, counts (no payload content)
+//   stop   --target <dir>  stop a running custodian (or remove a verified stale socket)
+//   cancel --target <dir> --handoff <id>  drop one handoff
+// The endpoint directory is resolved automatically (platform + uid only; see endpoint.mjs) and is identical for the MCP server and the
+// writer, whatever their TMPDIR/HOME/cwd. `--runtime-dir <abs>` is an optional advanced/test override that must then be given to all three.
 // Exit codes: 0 ok, 1 failure, 2 usage.
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ import { statusOf, stopCustodian, cancelHandoff } from './client.mjs';
 import { resolveRuntimeDir, socketPath, assertPrivateDir } from './endpoint.mjs';
 import { targetIdentity } from './identity.mjs';
 
-const USAGE = 'Usage: custodian-cli.mjs <start|status|stop|cancel> --target <dir> --runtime-dir <absolute dir> [--handoff <id>] [--json]';
+const USAGE = 'Usage: custodian-cli.mjs <start|status|stop|cancel> --target <dir> [--runtime-dir <absolute dir>] [--handoff <id>] [--json]';
 
 function parse(argv) {
   const [cmd, ...rest] = argv; const o = { cmd, json: false };
@@ -26,7 +26,7 @@ function parse(argv) {
     else if (rest[i] === '--handoff' && rest[i + 1] && o.handoff === undefined) o.handoff = rest[++i];
     else return { usage: true };
   }
-  if (!['start', 'status', 'stop', 'cancel'].includes(cmd) || !o.target || o.dir === undefined) return { usage: true };
+  if (!['start', 'status', 'stop', 'cancel'].includes(cmd) || !o.target) return { usage: true };
   if ((cmd === 'cancel') !== (o.handoff !== undefined)) return { usage: true };
   return o;
 }

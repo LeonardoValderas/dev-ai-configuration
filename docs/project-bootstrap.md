@@ -40,7 +40,7 @@ Providers: `claude-code`, `codex`, `cursor`. Exit codes: 0 ok, 1 conflict/failur
 ### Codex SDD handoff runtime (`--sdd-handoff`, local pilot)
 
 `--provider codex --sdd-handoff` installs the same `.dac/runtime/sdd-handoff/` proxy plus one `[mcp_servers.dac-sdd-handoff]` table in `.codex/config.toml`
-(`enabled_tools = ["sdd_handoff_submit"]`, project-relative launcher, runtime dir from `DAC_SDD_RUNTIME_DIR`) and a handoff instruction block in `.codex/agents/technical-planner.toml`;
+(`enabled_tools = ["sdd_handoff_submit"]`, direct `node` launcher with the fixed target `.`, automatic endpoint: no shell, no environment variable) and a handoff instruction block in `.codex/agents/technical-planner.toml`;
 everything stays read-only and the shared `AGENTS.md` is unchanged. Ownership is the `codex` manifest (`sdd_handoff: true`) and `.dac/standard.json`. The flag never applies to Cursor, and
 one provider per project owns the runtime (`claude-code` and `codex` together are refused with `OPTIONS`). Runtime compatibility with real Codex is **UNVERIFIED** until the second-Mac pilot:
 [sdd-input-handoff.md section 7](sdd-input-handoff.md#7-codex-local-pilot-project-local-opt-in).
@@ -48,7 +48,7 @@ one provider per project owns the runtime (`claude-code` and `codex` together ar
 ### Claude Code SDD handoff runtime (`--sdd-handoff`)
 
 Off by default; asking for it without `claude-code` or `codex` fails (`OPTIONS`). It installs the stateless submit-only MCP proxy under
-`.dac/runtime/sdd-handoff/`, a portable `.mcp.json` entry (project-relative script, `--target .`, `--runtime-dir ${DAC_SDD_RUNTIME_DIR}`), the single
+`.dac/runtime/sdd-handoff/`, a portable `.mcp.json` entry (project-relative script, `--target .`; the endpoint is automatic, no `--runtime-dir`, no environment variable), the single
 `mcp__dac-sdd-handoff__sdd_handoff_submit` permission and the tool on `technical-planner` only. The files are owned by the `claude-code` manifest (`sdd_handoff: true`; the
 `.dac/standard.json` provider entry gains `sdd_handoff: true`) and go through the same plan/journal/rollback/uninstall as every other managed file;
 `update` keeps the recorded option and never enables it on its own; project-owned `.sdd/` is preserved byte for byte and the Writer never touches `.dac/`.

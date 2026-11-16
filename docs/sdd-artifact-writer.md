@@ -376,22 +376,24 @@ confirmation phrase on `/dev/tty` -> `verify`.
 Commands (repository root; `<T>` is the real target directory):
 
 ```
-node adapters/shared/sdd-handoff/custodian-cli.mjs start  --target <T> --runtime-dir <R>   # foreground; Ctrl-C destroys all handoffs
-node adapters/shared/sdd-handoff/custodian-cli.mjs status --target <T> --runtime-dir <R>   # never prints payload content
-node adapters/shared/sdd-handoff/custodian-cli.mjs stop   --target <T> --runtime-dir <R>   # or removes a verified stale socket
-node adapters/shared/sdd-handoff/custodian-cli.mjs cancel --target <T> --runtime-dir <R> --handoff <id>
-node adapters/shared/sdd-writer/cli.mjs plan|apply --target <T> --runtime-dir <R> --handoff <id>
+node installer/bootstrap.mjs handoff start  --target <T>   # foreground; Ctrl-C destroys all handoffs (same as custodian-cli.mjs start)
+node installer/bootstrap.mjs handoff status --target <T>   # never prints payload content
+node installer/bootstrap.mjs handoff stop   --target <T>   # or removes a verified stale socket
+node adapters/shared/sdd-handoff/custodian-cli.mjs cancel --target <T> --handoff <id>
+node adapters/shared/sdd-writer/cli.mjs plan|apply --target <T> --handoff <id>
 ```
+
+No runtime directory is typed or exported: it is derived automatically (see Endpoint discovery). `--runtime-dir <abs>` exists only as an advanced/test override.
 
 - **Target** is fixed when the human starts the custodian (and in the MCP server args of `.mcp.json`); it is never a tool
   argument, extra tool fields are rejected, and the custodian refuses any request carrying another target identity
   (`TARGET_MISMATCH`). Each stored entry is bound to the real target identity (realpath, device, inode) and the CLI re-checks
   both that and the payload digest.
-- **Endpoint discovery**: `<R>` is an absolute, normalized runtime directory the human chooses (created 0700 if missing; its
-  parent must already exist). It is never derived from `TMPDIR`/`os.tmpdir()`, the cwd or any environment variable, and it is
-  never a tool argument: the same `--runtime-dir <R>` is given to the custodian, to the MCP server (args in `.mcp.json`, written by
-  the human/bootstrap; the example uses a placeholder, no machine path is distributed) and to the Writer command shown by the
-  MCP result. The socket is `<R>/h2-<sha256(realpath, device, inode)[0:20]>.sock`, so every process reaches the same
+- **Endpoint discovery**: the runtime directory `<R>` is resolved automatically from the platform and real uid only: macOS `/private/tmp/dac-sdd-<uid>`; Linux
+  `/run/user/<uid>/dac-sdd` when `/run/user/<uid>` is a safe private directory, else `/tmp/dac-sdd-<uid>`. It is never derived from `TMPDIR`/`os.tmpdir()`, `HOME`, the cwd or any
+  environment variable, and it is never a tool argument. Every component is validated (real directories, owned by root/you, no unsafe writable ancestor, final directory yours with mode 0700,
+  never repaired when foreign). The custodian, the MCP proxy and the Writer therefore agree with no configuration. An explicit absolute `--runtime-dir <R>` is an advanced/test override that must
+  be given to all three. The socket is `<R>/h2-<sha256(realpath, device, inode)[0:20]>.sock` (length checked in bytes), so every process reaches the same
   endpoint regardless of TMPDIR or cwd, and a restarted MCP proxy reconnects to the same custodian.
 - **Discovery metadata** `<R>/h2-<key>.json` (0600, atomic temp+rename, versioned `dac-sdd-handoff-endpoint` v1) holds only the
   target identity, runtime dir, socket name + inode/device, custodian instance id/pid/start time. It contains no payload, handoff
@@ -430,12 +432,12 @@ node adapters/shared/sdd-writer/cli.mjs plan|apply --target <T> --runtime-dir <R
   only after verifying it is a private socket owned by the user and that connecting is refused (never by age); `status` reports
   `stale-socket` and removes nothing. A socket with a live listener, or any non-socket file, is never removed.
 - **Error forwarding**: validation errors returned to the agent are redacted (`errors.mjs`: fixed `code/rule/path/message` shape, quoted ids and unknown field names removed, bounded to 50); the custodian and the proxy both apply it.
-- **MCP proxy** (`mcp-server.mjs --target <T> --runtime-dir <R>`): exactly one tool, no state, no persistent connection, no listener, no
+- **MCP proxy** (`mcp-server.mjs --target <T>`): exactly one tool, no state, no persistent connection, no listener, no
   file writes. If no custodian runs it still connects and lists its tool; submit then returns `CUSTODIAN_UNAVAILABLE` with the
   start command for the human.
 - **Claude Code config**: installed by the project bootstrap (`node installer/bootstrap.mjs apply --provider claude-code --sdd-handoff --target <P>`), see
-  [sdd-input-handoff.md](sdd-input-handoff.md). The proxy lives in the project at `.dac/runtime/sdd-handoff/`; `.mcp.json` uses a project-relative script, `--target .` and
-  `--runtime-dir ${DAC_SDD_RUNTIME_DIR}` (no machine path is distributed; `adapters/claude-code/examples/sdd-handoff-poc/` shows the fragments). The only permission is
+  [sdd-input-handoff.md](sdd-input-handoff.md). The proxy lives in the project at `.dac/runtime/sdd-handoff/`; `.mcp.json` uses a project-relative script, `--target .`
+  (no runtime-dir, no environment variable, no machine path is distributed; `adapters/claude-code/examples/sdd-handoff-poc/` shows the fragments). The only permission is
   `mcp__dac-sdd-handoff__sdd_handoff_submit`: no Write/Edit/Bash grant, no apply/cancel tool. The Writer never writes `.dac/` or `.claude/` (tested).
 
 **Persistence surfaces (exhaustive)**: payload bytes, plan digests and payload digests exist only in custodian process memory and

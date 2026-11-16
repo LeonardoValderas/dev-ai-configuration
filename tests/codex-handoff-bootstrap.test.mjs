@@ -17,7 +17,8 @@ import { startCustodian } from '../adapters/shared/sdd-handoff/custodian.mjs';
 import { withLease } from '../adapters/shared/sdd-handoff/client.mjs';
 import { plan as writerPlan, apply as writerApply, verify as writerVerify } from '../adapters/shared/sdd-writer/writer.mjs';
 import { generatePortable, verifyPortable } from '../adapters/shared/portable.mjs';
-import { RUNTIME_DIR, RUNTIME_DIR_ENV, SERVER_NAME, runtimeFiles } from '../adapters/shared/sdd-handoff/claude-config.mjs';
+import { resolveRuntimeDir } from '../adapters/shared/sdd-handoff/endpoint.mjs';
+import { RUNTIME_DIR, SERVER_NAME, runtimeFiles } from '../adapters/shared/sdd-handoff/claude-config.mjs';
 import { CODEX_TOOL, codexServerToml, handoffInstructions } from '../adapters/shared/sdd-handoff/codex-config.mjs';
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'dac-xh-')));
@@ -131,17 +132,18 @@ test('[BOOT] update of an existing Codex project (installed without handoff): up
 });
 
 // ---- 2 config and tool restrictions --------------------------------------------------------------------------------------------
-test('[UNIT] native Codex config: exactly one MCP server, fixed launcher and runtime from the environment, one exposed tool, read-only defaults, no extra grant', () => {
+test('[UNIT] native Codex config: exactly one MCP server, direct node launcher (no shell, no env forwarding), automatic endpoint, one exposed tool, read-only defaults, no extra grant', () => {
   const p = generatePortable('codex', { sddHandoff: true }); const base = generatePortable('codex');
   assert.equal(verifyPortable('codex', p), true); assert.deepEqual(p, generatePortable('codex', { sddHandoff: true }), 'deterministic');
   const cfg = p.files.get('.codex/config.toml').toString();
   assert.equal(cfg, base.files.get('.codex/config.toml').toString() + '\n' + codexServerToml(), 'the option only appends the one server table');
   assert.deepEqual([...cfg.matchAll(/^\[mcp_servers\.([^\]]+)\]$/gm)].map((m) => m[1]), [SERVER_NAME]);
   const t = serverTable(cfg);
-  assert.deepEqual(t, { command: 'sh', args: ['-c', `exec node ${RUNTIME_DIR}/mcp-server.mjs --target . --runtime-dir "$${RUNTIME_DIR_ENV}"`], env_vars: [RUNTIME_DIR_ENV], enabled: true, enabled_tools: [CODEX_TOOL] });
+  assert.deepEqual(t, { command: 'node', args: [`${RUNTIME_DIR}/mcp-server.mjs`, '--target', '.'], enabled: true, enabled_tools: [CODEX_TOOL] });
+  assert.doesNotMatch(cfg, /\bsh\b|-c\b|env_vars|runtime-dir|DAC_SDD|\$\{?[A-Z_]+/, 'no shell wrapper, no env forwarding, no runtime-dir, no variable expansion');
   assert.equal(CODEX_TOOL, 'sdd_handoff_submit'); assert.deepEqual(t.enabled_tools, ['sdd_handoff_submit']);
-  // target is fixed `.`, runtime dir is an env reference: neither is a model argument; no endpoint/target is configurable by the model
-  assert.ok(t.args[1].includes('--target .') && t.args[1].includes(`"$${RUNTIME_DIR_ENV}"`)); assert.ok(!/\/(Users|home|private|var\/folders|tmp)\//.test(cfg));
+  // target is fixed `.`, the endpoint is automatic: neither is a model argument; no endpoint/target is configurable by the model
+  assert.deepEqual(t.args.slice(1), ['--target', '.']); assert.ok(!/\/(Users|home|private|var\/folders|tmp)\//.test(cfg));
   // read-only defaults of the pre-existing config are unchanged and nothing grants shell/write/apply/approval
   assert.match(cfg, /^sandbox_mode = "read-only"$/m); assert.match(cfg, /^approval_policy = "never"$/m); assert.match(cfg, /^shell_tool = false$/m); assert.match(cfg, /^web_search = "disabled"$/m);
   assert.doesNotMatch(cfg, /danger-full-access|workspace-write|approval_policy = "(on-|untrusted|always)|shell_tool = true|bypass|sandbox_mode = "(?!read-only)/);
@@ -181,9 +183,9 @@ test('[UNIT] tampering with the handoff plan is rejected by the canonical verifi
   assert.equal(verifyPortable('codex', good), true);
 });
 
-test('[PROC] the exact generated launcher starts the real proxy from the project root: one tool, no target/runtime argument, fail closed without the environment variable', async () => {
+test('[PROC] the exact generated launcher starts the real proxy from the project root: one tool, no target/runtime argument, automatic endpoint, inert environment, fail closed without a custodian', async () => {
   const s = await source(); const t = realpathSync(target()); assert.equal(codexApply(s, t).status, 'APPLIED');
-  const tbl = serverTable(read(t, '.codex/config.toml')); const rt = runtimeDir();
+  const tbl = serverTable(read(t, '.codex/config.toml')); assert.equal(tbl.command, 'node'); assert.equal(tbl.env_vars, undefined);
   const launch = (env) => spawn(tbl.command, tbl.args, { cwd: t, stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: scratch, ...env } });
   const rpcOn = (child) => {
     children.push(child); let buf = ''; let err = ''; let id = 0; const waiters = new Map();
@@ -193,29 +195,27 @@ test('[PROC] the exact generated launcher starts the real proxy from the project
     const rpc = (method, params) => new Promise((res, rej) => { const i = ++id; const to = setTimeout(() => rej(new Error(`no reply to ${method}: ${err}`)), 20000); waiters.set(i, (m) => { clearTimeout(to); res(m); }); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: i, method, params })}\n`); });
     return { rpc, exited, child };
   };
-  // unset variable => the proxy never starts (empty --runtime-dir); relative => refuses; nothing is written
-  assert.equal((await rpcOn(launch({})).exited).code, 2);
-  assert.equal((await rpcOn(launch({ [RUNTIME_DIR_ENV]: 'relative/dir' })).exited).code, 1);
-  assert.equal(existsSync(join(t, '.sdd')), false);
-  const m = rpcOn(launch({ [RUNTIME_DIR_ENV]: rt }));
+  // nothing to set: a hostile/legacy environment (relative runtime var, foreign TMPDIR) is inert; no custodian => submit refuses, nothing is written
+  const m = rpcOn(launch({ DAC_SDD_RUNTIME_DIR: 'relative/dir', TMPDIR: join(scratch, 'elsewhere') }));
   const init = await m.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } }); assert.equal(init.result.serverInfo.name, SERVER_NAME);
   const tl = await m.rpc('tools/list', {}); assert.deepEqual(tl.result.tools.map((x) => x.name), [CODEX_TOOL]);
   const props = Object.keys(tl.result.tools[0].inputSchema.properties).sort(); assert.deepEqual(props, ['constitution', 'markdown', 'operation', 'project_id', 'specify']);
   assert.equal(tl.result.tools[0].inputSchema.additionalProperties, false);
   for (const bad of [{ ...envelope(), target: '/etc' }, { ...envelope(), runtime_dir: '/tmp' }, { ...envelope(), apply: true }]) { const r = await m.rpc('tools/call', { name: CODEX_TOOL, arguments: bad }); assert.equal(r.result.isError, true); assert.equal(JSON.parse(r.result.content[0].text).code, 'INPUT'); }
   for (const other of ['sdd_handoff_apply', 'shell', 'write_file']) assert.equal((await m.rpc('tools/call', { name: other, arguments: {} })).error.code, -32602);
+  const none = await m.rpc('tools/call', { name: CODEX_TOOL, arguments: envelope() }); assert.equal(none.result.isError, true); const nb = JSON.parse(none.result.content[0].text); assert.equal(nb.code, 'CUSTODIAN_UNAVAILABLE'); assert.ok(!nb.message.includes('--runtime-dir')); assert.deepEqual(nb.files_changed, []);
   m.child.stdin.end(); await m.exited; assert.equal(existsSync(join(t, '.sdd')), false);
 });
 
 // ---- 3 end to end with no manual sdd-input.json ---------------------------------------------------------------------------------
 test('[PROC] Codex project end to end with no sdd-input.json: bootstrap -> custodian -> launcher from config.toml -> submit -> Writer apply (--handoff) -> verify; Writer never touches .dac/.codex', async () => {
-  const s = await source(); const t = realpathSync(target()); const rt = runtimeDir();
+  const s = await source(); const t = realpathSync(target()); const rt = resolveRuntimeDir(); // the deterministic automatic endpoint
   assert.equal(codexApply(s, t).status, 'APPLIED'); const installed = without(snapshot(t), '.sdd');
   assert.equal(existsSync(join(t, 'sdd-input.json')), false);
   const stub = ({ target, input }) => writerPlan({ target, input, source: () => ({ head: 'a'.repeat(40) }) });
   const c = await startCustodian({ target: t, dir: rt, writePlan: stub }); closers.push(() => c.close());
   const tbl = serverTable(read(t, '.codex/config.toml'));
-  const child = spawn(tbl.command, tbl.args, { cwd: t, stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: scratch, [RUNTIME_DIR_ENV]: rt } }); children.push(child);
+  const child = spawn(tbl.command, tbl.args, { cwd: t, stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: scratch } }); children.push(child);
   let buf = ''; let err = ''; const waiters = new Map(); let id = 0; child.stderr.on('data', (x) => { err += x; }); child.stdout.setEncoding('utf8');
   child.stdout.on('data', (x) => { buf += x; let i; while ((i = buf.indexOf('\n')) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); waiters.get(m.id)?.(m); } });
   const closed = new Promise((r) => child.once('close', r));
@@ -227,7 +227,7 @@ test('[PROC] Codex project end to end with no sdd-input.json: bootstrap -> custo
   assert.equal(existsSync(join(t, '.sdd')), false, 'submit writes nothing'); assert.deepEqual(without(snapshot(t), '.sdd'), installed);
   child.stdin.end(); await closed;
   const tty = { calls: 0, confirm() { this.calls++; return true; } };
-  const out = await withLease(body.handoff_id, t, (payload) => writerApply({ target: t, input: payload, source: () => ({ head: 'a'.repeat(40) }), terminal: tty }), { dir: rt, shouldConsume: (x) => x.status === 'APPLIED' });
+  const out = await withLease(body.handoff_id, t, (payload) => writerApply({ target: t, input: payload, source: () => ({ head: 'a'.repeat(40) }), terminal: tty }), { shouldConsume: (x) => x.status === 'APPLIED' });
   assert.equal(out.handoff.consumption, 'consumed'); assert.equal(tty.calls, 1, 'approval stays on the human terminal');
   assert.equal(writerVerify({ target: t, projectId: PID }).status, 'OK');
   assert.deepEqual(without(snapshot(t), '.sdd'), installed, 'the Writer changed nothing outside .sdd (.dac and .codex byte-identical)');

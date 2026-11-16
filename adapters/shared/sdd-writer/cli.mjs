@@ -13,9 +13,10 @@ const USAGE = `Usage: node adapters/shared/sdd-writer/cli.mjs <command> [options
 Commands:
   plan   --target <dir> --input <file>        Validate and print the canonical plan (no writes)
   apply  --target <dir> --input <file>        Write after approval on the controlling terminal
-  plan   --target <dir> --handoff <id> --runtime-dir <abs>   Same, reading the envelope from the human-started in-memory custodian (not consumed)
-  apply  --target <dir> --handoff <id> --runtime-dir <abs>   Same; the handoff is consumed only after a successful apply
-                                              (--input and --handoff are mutually exclusive)
+  plan   --target <dir> --handoff <id>        Same, reading the envelope from the human-started in-memory custodian (not consumed)
+  apply  --target <dir> --handoff <id>        Same; the handoff is consumed only after a successful apply
+                                              (--input and --handoff are mutually exclusive; the custodian endpoint is automatic,
+                                               optional advanced override: --runtime-dir <abs>)
          [--recover-lock]                     Offer recovery of a stale lock (terminal confirmation required)
   verify --target <dir> --project <id>        Re-read disk and check artifacts against receipts (no writes)
 Options:
@@ -42,7 +43,6 @@ function parseArgs(argv) {
   if (!['plan', 'apply', 'verify'].includes(cmd)) return { usage: cmd === '--help' || cmd === '-h' ? '' : 'Unknown command', help: cmd === '--help' || cmd === '-h' };
   if (!o.target) return { usage: '--target is required' };
   if (o.input !== undefined && o.handoff !== undefined) return { usage: '--input and --handoff are mutually exclusive' };
-  if (o.handoff !== undefined && o.runtimeDir === undefined) return { usage: '--handoff requires --runtime-dir <absolute dir> (the human-chosen custodian runtime directory)' };
   if (o.handoff === undefined && o.runtimeDir !== undefined) return { usage: '--runtime-dir is only valid with --handoff' };
   if (cmd === 'verify' && o.handoff !== undefined) return { usage: 'verify does not take --handoff' };
   if (cmd !== 'verify' && o.handoff === undefined && (!o.input || o.input === '-')) return { usage: '--input <file> is required (stdin is not accepted)' };

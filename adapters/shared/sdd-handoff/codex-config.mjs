@@ -5,25 +5,24 @@
 // (see claude-config.mjs runtimeFiles), the independent human-started custodian and the Writer. Nothing here is a second broker or writer.
 //
 // Native Codex project configuration (`.codex/config.toml`, table `[mcp_servers.<name>]`; same table the Context7 template already uses):
-//  - command/args : launched with the project root as working directory; the target is the fixed `.`; the runtime directory comes from the
-//                   operator's environment variable DAC_SDD_RUNTIME_DIR (forwarded by `env_vars`; Codex does not expand variables in `args`,
-//                   so a fixed `sh -c` launcher with a quoted expansion is the only indirection). Never a model/tool argument. If the variable
-//                   is unset the proxy receives an empty --runtime-dir and refuses to start (fail closed).
+//  - command/args : `node` runs the installed proxy directly (no shell launcher), with the project root as working directory and the fixed
+//                   target `.`. The endpoint is derived automatically from platform + uid, identical to the custodian's and the Writer's;
+//                   there is no environment variable, no runtime-dir argument and nothing a model/tool argument could alter.
 //  - enabled_tools: exactly ["sdd_handoff_submit"], so even a future second tool in the proxy would not be exposed.
-// The launcher is the MCP server's start command, not a model-facing tool: `[features] shell_tool = false`, `sandbox_mode = "read-only"` and
-// `approval_policy = "never"` in the same file are unchanged, and no tool other than the single submit tool is granted.
+// `[features] shell_tool = false`, `sandbox_mode = "read-only"` and `approval_policy = "never"` in the same file are unchanged, and no tool
+// other than the single submit tool is granted.
 // Runtime compatibility with a real Codex session is UNVERIFIED (see docs/sdd-input-handoff.md).
-import { SERVER_NAME, RUNTIME_DIR, RUNTIME_DIR_ENV, HANDOFF_AGENTS } from './claude-config.mjs';
+import { SERVER_NAME, RUNTIME_DIR, HANDOFF_AGENTS } from './claude-config.mjs';
 
-export { SERVER_NAME, RUNTIME_DIR, RUNTIME_DIR_ENV, HANDOFF_AGENTS };
+export { SERVER_NAME, RUNTIME_DIR, HANDOFF_AGENTS };
 export const CODEX_TOOL = 'sdd_handoff_submit';
 export const CODEX_CONFIG_PATH = '.codex/config.toml';
 
 const q = (s) => JSON.stringify(s); // JSON strings are valid TOML basic strings for this ASCII content
 
 export const LAUNCH = Object.freeze({
-  command: 'sh',
-  args: Object.freeze(['-c', `exec node ${RUNTIME_DIR}/mcp-server.mjs --target . --runtime-dir "$${RUNTIME_DIR_ENV}"`]),
+  command: 'node',
+  args: Object.freeze([`${RUNTIME_DIR}/mcp-server.mjs`, '--target', '.']),
 });
 
 export function codexServerToml() {
@@ -31,7 +30,6 @@ export function codexServerToml() {
     `[mcp_servers.${SERVER_NAME}]`,
     `command = ${q(LAUNCH.command)}`,
     `args = [${LAUNCH.args.map(q).join(', ')}]`,
-    `env_vars = [${q(RUNTIME_DIR_ENV)}]`,
     'enabled = true',
     `enabled_tools = [${q(CODEX_TOOL)}]`,
     '',

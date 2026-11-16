@@ -367,6 +367,7 @@ Commands:
   verify --target <dir>                       Check integrity and drift (no writes)
   update --target <dir>                       Explicitly move installed providers to this checkout's standard
   uninstall --provider <p> --target <dir>     Remove one provider; shared AGENTS.md is kept while another owner remains
+  handoff <start|status|stop> --target <dir>  Operate the human-started SDD handoff custodian (foreground start; automatic endpoint)
 Providers: ${PROVIDERS.join(', ')} (repeat --provider or comma-separate)
 Options:
   --context7               Opt in to the Context7 template for the provider(s) being applied (off by default)
@@ -426,4 +427,20 @@ function main(argv) {
   }
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv.slice(2));
+// `handoff <start|status|stop> --target <dir>`: thin facade over the independent, human-operated custodian CLI. No environment variable and
+// no runtime path to type: the endpoint is resolved automatically (platform + uid). `start` runs in the foreground (Ctrl-C stops it).
+// It does not touch the project or the standard (no Git source gate needed) and adds no option the custodian CLI does not already have.
+async function handoffMain(argv) {
+  const [, sub, ...rest] = argv;
+  if (!['start', 'status', 'stop'].includes(sub) || rest.length < 2 || rest[0] !== '--target' || !rest[1] || rest.slice(2).some((a) => a !== '--json')) {
+    console.error('Usage: node installer/bootstrap.mjs handoff <start|status|stop> --target <dir> [--json]');
+    return 2;
+  }
+  const { main: custodian } = await import('../adapters/shared/sdd-handoff/custodian-cli.mjs');
+  return custodian([sub, ...rest]);
+}
+
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  if (process.argv[2] === 'handoff') { const code = await handoffMain(process.argv.slice(2)); if (code !== null) process.exitCode = code; } // null: `start` keeps running
+  else process.exitCode = main(process.argv.slice(2));
+}
