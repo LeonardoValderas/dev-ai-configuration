@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Provider-neutral AI development standard: contracts, manifests and read-only validators.",
+  "bin": { "dac": "bin/dac.mjs" },
   "engines": { "node": ">=20" },
   "scripts": {
     "validate": "node installer/validate.mjs",

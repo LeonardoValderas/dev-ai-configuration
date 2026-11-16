@@ -113,6 +113,18 @@ node installer/bootstrap.mjs verify --target <dir>
 7. Uninstall one provider: `node installer/bootstrap.mjs uninstall --provider <p> --target <dir>`.
    The shared `AGENTS.md` is kept while another provider still owns it.
 
+### `dac` shortcut (claude-code or codex; thin facade, see [docs/dac-cli.md](docs/dac-cli.md))
+
+From inside a Git project (empty non-Git folders are unsupported in v1), using this clean checkout:
+
+```
+node <clone>/bin/dac.mjs init --provider codex      # shows the dry-run, then applies
+node <clone>/bin/dac.mjs start                      # foreground custodian (Ctrl-C stops)
+node <clone>/bin/dac.mjs status [--json]
+node <clone>/bin/dac.mjs sdd plan --handoff <ID>    # then: sdd apply --handoff <ID>; sdd verify --project <ID>
+node <clone>/bin/dac.mjs stop
+```
+
 Each project records the standard version and the full 40-hex source commit in
 `.dac/standard.json`, and the shared `AGENTS.md` ownership in `.dac/shared.json`. The per-provider
 commands under `adapters/<provider>/cli.mjs` still exist (single provider, legacy manifests).

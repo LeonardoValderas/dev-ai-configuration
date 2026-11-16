@@ -359,6 +359,13 @@ export function verify({ target }) {
   return { status, findings, providers: state.installed, standard: state.standard.value ? { version: state.standard.value.standard_version, commit: state.standard.value.standard_commit } : null, source, outdated };
 }
 
+// Read-only: the options each installed provider was installed with (context7 / optional agents / sdd_handoff). Used by the `dac` facade
+// so re-running init reuses the existing engine with the recorded options. Never writes; conflicts are reported, not interpreted.
+export function installedOptions({ target }) {
+  const state = readState(resolveTarget(target));
+  return { providers: Object.fromEntries([...state.providers].filter(([, s]) => !s.broken).map(([p, s]) => [p, s.options])), broken: [...state.providers].filter(([, s]) => s.broken).map(([p]) => p), conflicts: state.conflicts };
+}
+
 // ---- CLI -------------------------------------------------------------------
 const USAGE = `Usage: node installer/bootstrap.mjs <command> [options]
 Commands:
