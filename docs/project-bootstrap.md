@@ -37,9 +37,17 @@ Providers: `claude-code`, `codex`, `cursor`. Exit codes: 0 ok, 1 conflict/failur
 | `update` | Explicit only (never run by `apply`/`verify`). Regenerates every installed provider from this checkout, keeping its recorded options, and moves the whole project to the checkout's version atomically. Drift is a CONFLICT with zero writes. Also migrates legacy installs. |
 | `uninstall` | Removes one provider's unmodified files. Drift is a CONFLICT with zero writes (a deliberate change from the per-provider CLI, which keeps modified files). Empty directories it leaves are pruned. Last provider removes `.dac/`. |
 
+### Codex SDD handoff runtime (`--sdd-handoff`, local pilot)
+
+`--provider codex --sdd-handoff` installs the same `.dac/runtime/sdd-handoff/` proxy plus one `[mcp_servers.dac-sdd-handoff]` table in `.codex/config.toml`
+(`enabled_tools = ["sdd_handoff_submit"]`, project-relative launcher, runtime dir from `DAC_SDD_RUNTIME_DIR`) and a handoff instruction block in `.codex/agents/technical-planner.toml`;
+everything stays read-only and the shared `AGENTS.md` is unchanged. Ownership is the `codex` manifest (`sdd_handoff: true`) and `.dac/standard.json`. The flag never applies to Cursor, and
+one provider per project owns the runtime (`claude-code` and `codex` together are refused with `OPTIONS`). Runtime compatibility with real Codex is **UNVERIFIED** until the second-Mac pilot:
+[sdd-input-handoff.md section 7](sdd-input-handoff.md#7-codex-local-pilot-project-local-opt-in).
+
 ### Claude Code SDD handoff runtime (`--sdd-handoff`)
 
-Claude Code only, off by default; asking for it without `claude-code` fails (`OPTIONS`). It installs the stateless submit-only MCP proxy under
+Off by default; asking for it without `claude-code` or `codex` fails (`OPTIONS`). It installs the stateless submit-only MCP proxy under
 `.dac/runtime/sdd-handoff/`, a portable `.mcp.json` entry (project-relative script, `--target .`, `--runtime-dir ${DAC_SDD_RUNTIME_DIR}`), the single
 `mcp__dac-sdd-handoff__sdd_handoff_submit` permission and the tool on `technical-planner` only. The files are owned by the `claude-code` manifest (`sdd_handoff: true`; the
 `.dac/standard.json` provider entry gains `sdd_handoff: true`) and go through the same plan/journal/rollback/uninstall as every other managed file;
@@ -193,7 +201,7 @@ the installed proxy running end to end from the project root without a manual `s
 - `apply` does not downgrade silently: a different recorded commit requires `update`, which also allows moving to an older commit. Ancestry of commits is not checked.
 - Cursor IDE vs Agent CLI behavior differs; enforcement is unverified for both.
 - Provider native support for `AGENTS.md` may change.
-- Handoff runtime: Claude Code only; a live model calling the tool is UNVERIFIED; `apply` without `--sdd-handoff` on a project that has it removes the managed runtime files (see [sdd-input-handoff.md](sdd-input-handoff.md)).
+- Handoff runtime: Claude Code and Codex (one per project; Codex is a local pilot, runtime compatibility UNVERIFIED until a real Codex session on the second Mac; covered by `tests/codex-handoff-bootstrap.test.mjs`); a live model calling the tool is UNVERIFIED; `apply` without `--sdd-handoff` on a project that has it removes the managed runtime files (see [sdd-input-handoff.md](sdd-input-handoff.md)).
 
 ## 12. Related
 

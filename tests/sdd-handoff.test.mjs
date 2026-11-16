@@ -476,7 +476,7 @@ test('11. [UNIT] Claude Code handoff config is portable (project-relative + env 
   const ex = join(REPO_ROOT, 'adapters/claude-code/examples/sdd-handoff-poc');
   assert.deepEqual(JSON.parse(readFileSync(join(ex, '.mcp.json'), 'utf8')), { mcpServers: { [SERVER_NAME]: mcpServerEntry() } });
   assert.deepEqual(JSON.parse(readFileSync(join(ex, '.claude/settings.json'), 'utf8')), { permissions: { allow: [TOOL_PERMISSION] }, enabledMcpjsonServers: [SERVER_NAME] });
-  for (const f of ['adapters/codex', 'adapters/cursor']) assert.equal(spawnSync('grep', ['-rli', 'sdd-handoff\\|sdd_handoff', join(REPO_ROOT, f)], { encoding: 'utf8' }).stdout.trim(), '', `${f} not wired`);
+  for (const f of ['adapters/cursor']) assert.equal(spawnSync('grep', ['-rli', 'sdd-handoff\\|sdd_handoff', join(REPO_ROOT, f)], { encoding: 'utf8' }).stdout.trim(), '', `${f} not wired`); // Codex wiring: tests/codex-handoff-bootstrap.test.mjs
   // source-level surface check: the proxy cannot apply, write, run commands or open its own listener
   const src = readFileSync(join(REPO_ROOT, 'adapters/shared/sdd-handoff/mcp-server.mjs'), 'utf8');
   assert.ok(!/child_process|writeFile|createServer\(\(|net\.createServer|\bapply\(|openTrustedTerminal/.test(src.replace(/export function createServer/g, '')));

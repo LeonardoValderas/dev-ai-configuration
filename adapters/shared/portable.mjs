@@ -2,6 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT, DEFAULT_INPUTS, validatePaths } from '../../installer/lib/run.mjs';
+import { runtimeFiles as handoffRuntimeFiles } from './sdd-handoff/claude-config.mjs';
+import { codexServerToml, handoffInstructions, assertCodexHandoffConfig, HANDOFF_AGENTS } from './sdd-handoff/codex-config.mjs';
 import { AdapterError, sha256, renderFrontmatter, selectAgents, selectSkills, buildSkill, buildContractsRule, buildSddRule } from './canonical.mjs';
 export { AdapterError } from './canonical.mjs';
 const std = join(REPO_ROOT, 'standards');
@@ -26,11 +28,15 @@ export function neutralAgentsMd() {
 
 export function generatePortable(provider, options = {}) {
   if (!['codex', 'cursor'].includes(provider)) throw new AdapterError('PROVIDER', 'unsupported adapter');
-  if (Object.keys(options).some((k) => !['context7', 'neutralAgents'].includes(k)) || ['context7', 'neutralAgents'].some((k) => options[k] !== undefined && typeof options[k] !== 'boolean')) throw new AdapterError('OPTIONS', 'only the boolean context7 and neutralAgents options are supported');
+  const OPTION_KEYS = ['context7', 'neutralAgents', 'sddHandoff'];
+  if (Object.keys(options).some((k) => !OPTION_KEYS.includes(k)) || OPTION_KEYS.some((k) => options[k] !== undefined && typeof options[k] !== 'boolean')) throw new AdapterError('OPTIONS', 'only the boolean context7, neutralAgents and sddHandoff options are supported');
   const context7 = options.context7 ?? false;
   // neutralAgents: the root AGENTS.md is a provider-neutral shared artifact owned by the bootstrap
   // ledger (.dac/shared.json), so it is not part of this provider's own file set or manifest.
   const neutralAgents = options.neutralAgents ?? false;
+  // sddHandoff (Codex only, opt-in): the shared submit-only MCP proxy runtime + native project-local MCP config. Never for Cursor.
+  const sddHandoff = options.sddHandoff ?? false;
+  if (sddHandoff && provider !== 'codex') throw new AdapterError('OPTIONS', 'the SDD handoff runtime is not supported for this provider');
   const { errors } = validatePaths(DEFAULT_INPUTS);
   if (errors.length) throw new AdapterError('CANONICAL_INVALID', 'canonical validation failed; run npm run validate');
   const base = `.${provider}`;
@@ -46,7 +52,8 @@ export function generatePortable(provider, options = {}) {
     const m = jsonRead(`manifests/agents/${id}.json`);
     if (m.permissions.tools.some((t) => !['Read', 'Grep', 'Glob', 'Write', 'Edit'].includes(t)) || !['plan', 'default'].includes(m.permissions.permission_mode)) throw new AdapterError('PERMISSION', 'unmapped canonical permission');
     const instructions = read(`manifests/agents/${m.instructions_path}`).toString().trimEnd();
-    const body = `${instructions}\n${deny}\nRead the task/result contracts and SDD workflow in ${base}/dac/.\nCanonical permission ceiling: ${JSON.stringify(m.permissions)}\n`;
+    const handoffAgent = sddHandoff && HANDOFF_AGENTS.includes(id);
+    const body = `${instructions}\n${deny}\nRead the task/result contracts and SDD workflow in ${base}/dac/.\nCanonical permission ceiling: ${JSON.stringify(m.permissions)}\n${handoffAgent ? handoffInstructions() : ''}`;
     agents.push({ id, canonical_read_only: m.read_only, read_only: true, writable_paths: [], tools: m.permissions.tools.filter((t) => ['Read', 'Grep', 'Glob'].includes(t)) });
     if (provider === 'codex') {
       config += `\n[agents.${id}]\ndescription = ${quote(m.description)}\nconfig_file = ${quote(`agents/${id}.toml`)}\n`;
@@ -78,11 +85,16 @@ export function generatePortable(provider, options = {}) {
     if (provider === 'codex') config += `\n[mcp_servers.context7]\nurl = ${quote(c7.url)}\nenabled = false\n`;
     else put('.cursor/dac/mcp/context7.template.json', json({ mcpServers: { context7: { url: c7.url } } }));
   }
+  if (sddHandoff) {
+    config += '\n' + codexServerToml();
+    assertCodexHandoffConfig(config, { context7 });
+    for (const [path, buf] of handoffRuntimeFiles()) put(path, buf);
+  }
   if (provider === 'codex') put('.codex/config.toml', config);
   for (const f of ['common', 'task-contract', 'result', 'sdd-project']) put(`${base}/dac/contracts/${f}.schema.json`, read(`schemas/${f}.schema.json`));
   for (const f of ['sdd-workflow', 'sdd-agent-map']) put(`${base}/dac/sdd/${f}.json`, read(`sdd/${f}.json`));
   const sorted = () => [...files].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-  const manifest = { adapter: provider, adapter_version: manifestDoc.version, context7_enabled: false, context7_template: context7, agents: agentIds, skills: skillIds, evidence: 'declarative', ...(neutralAgents ? { shared_paths: [SHARED_AGENTS_PATH] } : {}), files: sorted().map(([path, buf]) => ({ path, sha256: sha256(buf) })) };
+  const manifest = { adapter: provider, adapter_version: manifestDoc.version, context7_enabled: false, context7_template: context7, ...(sddHandoff ? { sdd_handoff: true } : {}), agents: agentIds, skills: skillIds, evidence: 'declarative', ...(neutralAgents ? { shared_paths: [SHARED_AGENTS_PATH] } : {}), files: sorted().map(([path, buf]) => ({ path, sha256: sha256(buf) })) };
   put(manifestPath, json(manifest));
   return { files: new Map(sorted()), agents, manifest };
 }
@@ -90,7 +102,7 @@ export function generatePortable(provider, options = {}) {
 // Verify the whole deterministic plan against fresh canonical inputs. Hashes supplied by callers
 // are not trusted: changing config, references, metadata or adding a file fails before any write.
 export function verifyPortable(provider, plan) {
-  const expected = generatePortable(provider, { context7: plan?.manifest?.context7_template ?? false, neutralAgents: Array.isArray(plan?.manifest?.shared_paths) });
+  const expected = generatePortable(provider, { context7: plan?.manifest?.context7_template ?? false, neutralAgents: Array.isArray(plan?.manifest?.shared_paths), sddHandoff: plan?.manifest?.sdd_handoff === true });
   if (!(plan?.files instanceof Map) || plan.files.size !== expected.files.size || JSON.stringify(plan.manifest) !== JSON.stringify(expected.manifest) || JSON.stringify(plan.agents) !== JSON.stringify(expected.agents)) throw new AdapterError('PLAN_INVALID', 'plan metadata differs from canonical generation');
   for (const [p, b] of expected.files) if (!Buffer.isBuffer(plan.files.get(p)) || !b.equals(plan.files.get(p))) throw new AdapterError('PLAN_INVALID', `noncanonical output: ${p}`);
   return true;

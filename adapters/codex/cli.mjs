@@ -12,15 +12,17 @@ Commands:
   uninstall --target <dir> Remove unmodified adapter-managed files (--dry-run supported)
 Options:
   --include-context7-template        Include an inert Context7 template (never connects)
+  --sdd-handoff            Install the SDD input-handoff runtime (.dac/runtime/sdd-handoff, submit-only MCP proxy, .codex/config.toml entry); off by default
   --dry-run                Report actions without writing
   --json                   Machine-readable output`;
 
 const args = process.argv.slice(2);
 const cmd = args.shift();
-const opts = { context7: false, dryRun: false, json: false, target: undefined };
+const opts = { context7: false, sddHandoff: false, dryRun: false, json: false, target: undefined };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--include-context7-template') opts.context7 = true;
+  else if (a === '--sdd-handoff') opts.sddHandoff = true;
   else if (a === '--dry-run') opts.dryRun = true;
   else if (a === '--json') opts.json = true;
   else if (a === '--target' && args[i + 1]) opts.target = resolve(args[++i]);
@@ -32,11 +34,11 @@ if (cmd !== 'plan' && !opts.target) { console.error(`--target is required\n${USA
 const out = (o, text) => console.log(opts.json ? JSON.stringify(o, null, 2) : text);
 try {
   if (cmd === 'plan') {
-    const plan = generate({ context7: opts.context7 });
+    const plan = generate({ context7: opts.context7, sddHandoff: opts.sddHandoff });
     const files = [...plan.files.keys()];
     out({ files }, files.join('\n'));
   } else if (cmd === 'apply') {
-    const r = apply(opts.target, generate({ context7: opts.context7 }), { dryRun: opts.dryRun });
+    const r = apply(opts.target, generate({ context7: opts.context7, sddHandoff: opts.sddHandoff }), { dryRun: opts.dryRun });
     out(r, `${r.status}: created ${r.created.length}, updated ${r.updated.length}, removed ${r.removed.length}, unchanged ${r.unchanged.length}${r.conflicts.map((c) => `\nCONFLICT ${c.path}: ${c.reason}`).join('')}`);
     process.exit(r.status === 'CONFLICT' ? 1 : 0);
   } else {

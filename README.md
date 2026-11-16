@@ -196,8 +196,11 @@ The SDD Artifact Writer can receive its input from a Claude Code session without
 `sdd-input.json`: `node installer/bootstrap.mjs apply --provider claude-code --sdd-handoff --target <dir>`
 installs a stateless, submit-only MCP proxy (`.dac/runtime/sdd-handoff/`, project-relative config) while a
 human-started in-memory custodian holds the envelope and the Writer still requires `/dev/tty` approval.
-Claude Code only; see [docs/sdd-input-handoff.md](docs/sdd-input-handoff.md) for the exact lifecycle, failure
-behavior and the three honestly skipped tests.
+Claude Code is integrated; Codex has the same opt-in flag (`--provider codex --sdd-handoff`, project-local
+`.codex/config.toml` MCP table exposing only `sdd_handoff_submit`) as a local pilot whose runtime
+compatibility is **UNVERIFIED** until a real Codex session on the second Mac (exact instructions in
+[docs/sdd-input-handoff.md](docs/sdd-input-handoff.md#7-codex-local-pilot-project-local-opt-in)). Cursor is unchanged.
+That document also holds the exact lifecycle, failure behavior and the three honestly skipped tests.
 
 Phase 2F adds an optional, disabled Context7 declaration and a sanitized,
 quarantined MCP reference inventory. See the [portable MCP catalog, policy,

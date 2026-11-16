@@ -65,6 +65,15 @@ Use a clean, appropriately constrained runtime; these files are not a security
 boundary against an operator changing settings. Codex shell disabling may also
 reduce file-search capabilities; unavailable actions remain BLOCKED.
 
+## Codex SDD input handoff (opt-in, local pilot)
+
+`node adapters/codex/cli.mjs apply --target <dir> --sdd-handoff` (or `node installer/bootstrap.mjs apply --provider codex --sdd-handoff --target <dir>`) adds, to the files above,
+the shared `.dac/runtime/sdd-handoff/` proxy files, one `[mcp_servers.dac-sdd-handoff]` table in `.codex/config.toml` with `enabled_tools = ["sdd_handoff_submit"]`, and a handoff
+instruction block in `.codex/agents/technical-planner.toml`; the manifest records `sdd_handoff: true`. Sandbox `read-only`, `approval_policy = "never"` and `shell_tool = false` are
+unchanged, no write/shell/approval/apply tool is granted, and the neutral `AGENTS.md` shared with Cursor is byte-identical. The Cursor adapter has no handoff option (`OPTIONS` error).
+Format: the table shape reuses the repository's existing `[mcp_servers.<id>]` Context7 template; `env_vars` and `enabled_tools` are Codex MCP server keys taken from the configuration reference below and are
+**UNVERIFIED against a real Codex session** (no session was started; the sandboxed `--version`/`--help` probes below prove binary startup only). Full design, the exact second-Mac pilot steps and the evidence boundary: [sdd-input-handoff.md section 7](sdd-input-handoff.md#7-codex-local-pilot-project-local-opt-in).
+
 ## Compatibility and evidence
 
 | Runtime baseline supplied for Phase 2H | Declarative checks | CLI integration | Authenticated enforcement |

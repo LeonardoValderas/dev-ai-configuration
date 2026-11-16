@@ -160,10 +160,11 @@ test('[BOOT] scope: Codex/Cursor are never touched or wired; a handoff request w
   for (const p of ['codex', 'cursor']) { const man = readJ(t, `.${p}/dac-manifest.json`); assert.ok(!JSON.stringify(man).includes('sdd_handoff') && !JSON.stringify(man).includes('sdd-handoff')); }
   for (const f of Object.keys(snapshot(t))) if ((f.startsWith('.codex/') || f.startsWith('.cursor/') || f === 'AGENTS.md') && !lstatSync(join(t, f)).isDirectory()) assert.ok(!/sdd[-_]handoff/i.test(read(t, f)), `${f} has no handoff wiring`);
   assert.equal(s.api.verify({ target: t }).status, 'OK');
-  for (const bad of [() => s.api.apply({ target: target(), providers: ['codex'], options: { sddHandoff: true } }), () => s.api.plan({ providers: ['cursor'], options: { sddHandoff: true } })]) assert.throws(bad, { code: 'OPTIONS' });
+  // Cursor can never receive the runtime (Codex support is covered by tests/codex-handoff-bootstrap.test.mjs)
+  for (const bad of [() => s.api.apply({ target: target(), providers: ['cursor'], options: { sddHandoff: true } }), () => s.api.plan({ providers: ['cursor'], options: { sddHandoff: true } })]) assert.throws(bad, { code: 'OPTIONS' });
   assert.equal(s.cli(['update', '--target', t, '--sdd-handoff']).status, 2);
-  // the adapter-level source of Codex/Cursor never mentions the handoff
-  for (const d of ['adapters/codex', 'adapters/cursor']) assert.equal(spawnSync('grep', ['-rli', 'handoff', join(REPO_ROOT, d)], { encoding: 'utf8' }).stdout.trim(), '');
+  // the adapter-level source of Cursor never mentions the handoff
+  for (const d of ['adapters/cursor']) assert.equal(spawnSync('grep', ['-rli', 'handoff', join(REPO_ROOT, d)], { encoding: 'utf8' }).stdout.trim(), '');
   // uninstalling claude-code leaves codex/cursor exactly as they were
   assert.equal(s.api.uninstall({ target: t, provider: 'claude-code' }).status, 'REMOVED'); assert.deepEqual(snapshot(t), other);
 });

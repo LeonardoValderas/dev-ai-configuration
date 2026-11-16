@@ -362,7 +362,7 @@ Real unresolved items only (everything in sections 2 to 7 is decided):
   is not a security boundary against a hostile local user.
 - Risk: inherited hard-kill, temp-file and best-effort rollback limits (section 7).
 
-## Input handoff PoC 2 (Claude Code only, human-started in-memory custodian)
+## Input handoff PoC 2 (Claude Code; Codex local pilot, human-started in-memory custodian)
 
 Experimental, Phase 2 PoC. It removes the manual JSON input file for Constitution + Specify without giving any agent
 write permission. Codex and Cursor are not wired. `--input <file>` is unchanged (same schemas, gates and TTY authorization).

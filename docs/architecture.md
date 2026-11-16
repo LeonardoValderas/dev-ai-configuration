@@ -77,4 +77,4 @@ The canonical phase state lives in one place only: the
 [README](../README.md#current-status-phase-2e). This document describes the
 layer structure and boundaries, which do not change between phases.
 
-See also: [SDD Artifact Writer](sdd-artifact-writer.md), [SDD input handoff for Claude Code](sdd-input-handoff.md) (independent in-memory custodian, stateless submit-only MCP proxy installed by the bootstrap, Writer-only persistence; Claude Code only).
+See also: [SDD Artifact Writer](sdd-artifact-writer.md), [SDD input handoff for Claude Code and Codex](sdd-input-handoff.md) (independent in-memory custodian, stateless submit-only MCP proxy installed by the bootstrap, Writer-only persistence; Claude Code integrated, Codex a local pilot with runtime compatibility UNVERIFIED; Cursor excluded).
