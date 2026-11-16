@@ -1,0 +1,6 @@
+{
+  "permissions": {
+    "allow": ["mcp__dac-sdd-handoff__sdd_handoff_submit"]
+  },
+  "enabledMcpjsonServers": ["dac-sdd-handoff"]
+}

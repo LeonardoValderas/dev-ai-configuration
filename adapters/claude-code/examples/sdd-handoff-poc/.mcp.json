@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "dac-sdd-handoff": {
+      "command": "node",
+      "args": [
+        ".dac/runtime/sdd-handoff/mcp-server.mjs",
+        "--target",
+        ".",
+        "--runtime-dir",
+        "${DAC_SDD_RUNTIME_DIR}"
+      ]
+    }
+  }
+}

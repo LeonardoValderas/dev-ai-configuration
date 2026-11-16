@@ -192,6 +192,13 @@ separation of real versus simulated evidence. Phase 2G.1 runs the real CLI only 
 disposable, OS-sandboxed runtime (`CLAUDE_CONFIG_DIR` plus OS write denial, never the
 user's `~/.claude`); live read-only tool enforcement remains UNVERIFIED (see the doc).
 
+The SDD Artifact Writer can receive its input from a Claude Code session without a manual
+`sdd-input.json`: `node installer/bootstrap.mjs apply --provider claude-code --sdd-handoff --target <dir>`
+installs a stateless, submit-only MCP proxy (`.dac/runtime/sdd-handoff/`, project-relative config) while a
+human-started in-memory custodian holds the envelope and the Writer still requires `/dev/tty` approval.
+Claude Code only; see [docs/sdd-input-handoff.md](docs/sdd-input-handoff.md) for the exact lifecycle, failure
+behavior and the three honestly skipped tests.
+
 Phase 2F adds an optional, disabled Context7 declaration and a sanitized,
 quarantined MCP reference inventory. See the [portable MCP catalog, policy,
 compatibility and adoption guide](docs/mcp-catalog.md). Provider templates are

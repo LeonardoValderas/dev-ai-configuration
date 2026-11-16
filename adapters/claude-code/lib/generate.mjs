@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { REPO_ROOT, DEFAULT_INPUTS, validatePaths } from '../../../installer/lib/run.mjs';
 
+import { SERVER_NAME as HANDOFF_SERVER, TOOL_PERMISSION as HANDOFF_TOOL, HANDOFF_AGENTS, runtimeFiles as handoffRuntimeFiles, mcpServerEntry as handoffServerEntry } from '../../shared/sdd-handoff/claude-config.mjs';
 import { AdapterError, sha256, renderFrontmatter, parseFrontmatter, splitList, selectAgents, selectSkills, buildSkill, buildContractsRule, buildSddRule } from '../../shared/canonical.mjs';
 export { AdapterError, sha256, renderFrontmatter, parseFrontmatter, splitList, selectAgents, selectSkills } from '../../shared/canonical.mjs';
 const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
@@ -37,7 +38,7 @@ function loadCanonical() {
 }
 
 // ---- agents ----------------------------------------------------------------
-function buildAgent(id) {
+function buildAgent(id, { handoff = false } = {}) {
   const dir = join(MANIFESTS, 'agents');
   const m = readJson(join(dir, `${id}.json`));
   const instructions = readText(join(dir, m.instructions_path)).replace(/\s+$/, '');
@@ -45,6 +46,7 @@ function buildAgent(id) {
   for (const t of p.tools) if (!KNOWN_TOOLS.has(t)) throw new AdapterError('UNMAPPED_TOOL', `agent "${id}" tool "${t}" has no Claude Code mapping`);
   if (!(p.permission_mode in MODE_RANK) || p.permission_mode === 'bypassPermissions') throw new AdapterError('UNSAFE_MODE', `agent "${id}" permission_mode is not allowed`);
   const tools = [...p.tools];
+  const granted = handoff ? [...tools, HANDOFF_TOOL] : tools; // the single submit-only MCP tool, only for the SDD-producing role
   const readOnly = m.read_only === true;
   // Shell commands are never granted: Claude Code subagent tool lists cannot scope Bash to
   // an exact command allow-list, so the adapter fails closed rather than exceed the manifest.
@@ -52,7 +54,7 @@ function buildAgent(id) {
   const fields = {
     name: m.id,
     description: `${m.description} Use when: ${(m.activation ?? []).join('; ')}.`,
-    tools: tools.join(', '),
+    tools: granted.join(', '),
     disallowedTools: disallowed.join(', '),
     permissionMode: p.permission_mode,
   };
@@ -68,13 +70,14 @@ function buildAgent(id) {
     '',
     '## Claude Code enforcement (generated)',
     '',
-    `- Granted tools: ${tools.join(', ')}.`,
+    `- Granted tools: ${granted.join(', ')}.`,
     `- Denied tools: ${disallowed.join(', ')}.`,
     `- Permission mode: ${p.permission_mode}.`,
     readOnly ? '- Read-only: this agent cannot write, edit or run shell commands.' : `- Writable paths: ${writable.join(', ')} (enforced by the project scope guard hook).`,
     shell.length ? `- Shell: not granted in Claude Code, so the canonical shell commands (${shell.join('; ')}) are not available to this agent; ask the orchestrator for command evidence.` : '- Shell: not granted.',
     '- Production access: none.',
     '',
+    ...(handoff ? ['## SDD handoff (generated)', '', `- \`${HANDOFF_TOOL}\` only submits a validated Constitution/Specify envelope to the human-started in-memory custodian; it writes nothing and has no apply or target argument.`, '- Report the returned handoff_id, plan_digest and human_commands to the human; never run, paraphrase or auto-confirm them. Approval happens only on the human terminal.', '- If the tool is unavailable or the custodian is not running, stop and report BLOCKED; do not write files or use another route.', ''] : []),
     '## Permission denial',
     '',
     'If a tool call or path is denied, stop that action and report execution_status BLOCKED with the denied action as an unresolved blocker. A denial is final: do not retry it by another route and do not hand the work to any other executor or agent.',
@@ -89,18 +92,20 @@ function buildAgent(id) {
 
 // ---- skills ----------------------------------------------------------------
 // ---- MCP / settings ---------------------------------------------------------
-function buildMcp(canon, enabled) {
+function buildMcp(canon, enabled, handoff = false) {
   const c7 = canon.context7;
   const t = canon.template;
   if (c7.id !== CONTEXT7_SERVER || t.provider !== 'claude-code' || t.remote_type !== 'http' || t.executable !== false || t.auto_enable !== false) throw new AdapterError('MCP_TEMPLATE', 'unexpected Context7 template');
-  if (!enabled) return { settings: { disabledMcpjsonServers: [CONTEXT7_SERVER], deny: [`mcp__${CONTEXT7_SERVER}`] }, mcp: null };
+  const handoffMcp = handoff ? { [HANDOFF_SERVER]: handoffServerEntry() } : {};
+  const handoffSettings = handoff ? { allow: [HANDOFF_TOOL], enabledMcpjsonServers: [HANDOFF_SERVER] } : {};
+  if (!enabled) return { settings: { disabledMcpjsonServers: [CONTEXT7_SERVER], deny: [`mcp__${CONTEXT7_SERVER}`], ...handoffSettings }, mcp: handoff ? { mcpServers: handoffMcp } : null };
   // Remote HTTP form only: no credentials, no env values, no package execution.
-  const mcp = { mcpServers: { [CONTEXT7_SERVER]: { type: 'http', url: c7.url } } };
-  return { settings: { disabledMcpjsonServers: [], deny: [] }, mcp };
+  const mcp = { mcpServers: { [CONTEXT7_SERVER]: { type: 'http', url: c7.url }, ...handoffMcp } };
+  return { settings: { disabledMcpjsonServers: [], deny: [], ...handoffSettings }, mcp };
 }
 
 // ---- main ------------------------------------------------------------------
-export function generate({ context7 = false, optionalAgents = [] } = {}) {
+export function generate({ context7 = false, optionalAgents = [], sddHandoff = false } = {}) {
   const canon = loadCanonical();
   const agentIds = selectAgents(canon.agentCatalog, optionalAgents);
   const skillIds = selectSkills(canon.skillCatalog);
@@ -108,16 +113,20 @@ export function generate({ context7 = false, optionalAgents = [] } = {}) {
   const put = (file, content) => files.set(file, Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8'));
   const json = (o) => JSON.stringify(o, null, 2) + '\n';
 
-  const agents = agentIds.map(buildAgent);
+  const agents = agentIds.map((id) => buildAgent(id, { handoff: sddHandoff && HANDOFF_AGENTS.includes(id) }));
   for (const a of agents) put(a.file, a.content);
   for (const id of skillIds) for (const f of buildSkill(id)) put(f.file, f.content);
 
-  const { settings, mcp } = buildMcp(canon, context7);
+  const { settings, mcp } = buildMcp(canon, context7, sddHandoff);
   const settingsDoc = { permissions: { defaultMode: 'default' }, enableAllProjectMcpServers: false };
   if (settings.deny.length) settingsDoc.permissions.deny = settings.deny;
   if (settings.disabledMcpjsonServers.length) settingsDoc.disabledMcpjsonServers = settings.disabledMcpjsonServers;
+  if (settings.allow) settingsDoc.permissions.allow = settings.allow;
+  if (settings.enabledMcpjsonServers) settingsDoc.enabledMcpjsonServers = settings.enabledMcpjsonServers;
   put('.claude/settings.json', json(settingsDoc));
   if (mcp) put('.mcp.json', json(mcp));
+
+  if (sddHandoff) for (const [path, buf] of handoffRuntimeFiles()) put(path, buf);
 
   put('.claude/rules/dac-contracts.md', buildContractsRule());
   put('.claude/rules/dac-sdd.md', buildSddRule(canon));
@@ -135,6 +144,7 @@ export function generate({ context7 = false, optionalAgents = [] } = {}) {
     adapter: ADAPTER_ID,
     adapter_version: adapterVersion,
     context7_enabled: context7,
+    ...(sddHandoff ? { sdd_handoff: true } : {}),
     agents: agentIds,
     skills: skillIds,
     files: body.map(([path, buf]) => ({ path, sha256: sha256(buf) })),
@@ -154,7 +164,9 @@ export function verifyWithinCanonical(plan, canon = null) {
     if (!fm) bad(`${meta.id}: missing frontmatter`);
     const tools = splitList(fm.tools);
     const denied = splitList(fm.disallowedTools);
-    for (const t of tools) if (!m.permissions.tools.includes(t)) bad(`${meta.id}: tool ${t} not in canonical manifest`);
+    const handoffAgent = plan.manifest?.sdd_handoff === true && HANDOFF_AGENTS.includes(meta.id);
+    for (const t of tools) if (!m.permissions.tools.includes(t) && !(handoffAgent && t === HANDOFF_TOOL)) bad(`${meta.id}: tool ${t} not in canonical manifest`);
+    if (!handoffAgent && tools.some((t) => t.startsWith('mcp__'))) bad(`${meta.id}: MCP tool granted to an agent outside the SDD handoff role`);
     if (tools.includes('Bash') || !denied.includes('Bash')) bad(`${meta.id}: shell must not be granted`);
     if (m.read_only) {
       for (const t of WRITE_TOOLS) { if (tools.includes(t) || !denied.includes(t)) bad(`${meta.id}: read-only agent must deny ${t}`); }
@@ -166,7 +178,16 @@ export function verifyWithinCanonical(plan, canon = null) {
     if (!m.read_only && tools.some((t) => WRITE_TOOLS.includes(t)) && !fm.hooks) bad(`${meta.id}: writing agent lacks scope guard`);
   }
   const settings = JSON.parse(plan.files.get('.claude/settings.json').toString('utf8'));
-  if (settings.permissions?.defaultMode !== 'default' || settings.permissions?.allow) bad('settings must not widen permissions');
+  const handoff = plan.manifest?.sdd_handoff === true;
+  if (settings.permissions?.defaultMode !== 'default') bad('settings must not widen permissions');
+  if (handoff ? JSON.stringify(settings.permissions.allow) !== JSON.stringify([HANDOFF_TOOL]) : settings.permissions?.allow) bad('settings must not widen permissions beyond the single submit tool');
+  if (!handoff && settings.enabledMcpjsonServers) bad('settings must not enable project MCP servers without the handoff option');
+  if (handoff) {
+    if (settings.enableAllProjectMcpServers !== false || JSON.stringify(settings.enabledMcpjsonServers) !== JSON.stringify([HANDOFF_SERVER])) bad('only the handoff MCP server may be enabled');
+    const mcp = JSON.parse(plan.files.get('.mcp.json')?.toString('utf8') ?? 'null');
+    if (JSON.stringify(mcp?.mcpServers?.[HANDOFF_SERVER]) !== JSON.stringify(handoffServerEntry())) bad('handoff MCP server entry is not the canonical portable entry');
+    if (/(^|[\s"'=])\/(?!\/)[A-Za-z]/.test(JSON.stringify(mcp.mcpServers[HANDOFF_SERVER]))) bad('handoff MCP entry must not contain an absolute path');
+  }
   if (JSON.stringify(settings).includes('bypassPermissions')) bad('settings must not use bypassPermissions');
   void canon;
   return true;
