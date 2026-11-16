@@ -37,7 +37,9 @@ provider generators and `createInstaller` planners under `adapters/` with the
 shared journaled executor, so one transaction covers every selected provider,
 the shared `AGENTS.md` ledger and the `.dac/` records. It requires a clean Git
 source with a verifiable `HEAD`. Behavior, ownership and limitations are in
-[Project bootstrap](project-bootstrap.md).
+[Project bootstrap](project-bootstrap.md). The `dac` CLI (`bin/dac.mjs`) is a thin
+facade over the bootstrap, the handoff custodian CLI and the SDD writer CLI; see
+[dac CLI v1](dac-cli.md).
 
 ### 5. Compatibility (`compatibility/`)
 
