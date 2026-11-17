@@ -115,10 +115,15 @@ node installer/bootstrap.mjs verify --target <dir>
 
 ### `dac` shortcut (claude-code or codex; thin facade, see [docs/dac-cli.md](docs/dac-cli.md))
 
-From inside a Git project (empty non-Git folders are unsupported in v1), using this clean checkout:
+Optional one-time command install (user-owned symlink, no `sudo`, manual PATH; see
+[docs/dac-cli.md](docs/dac-cli.md#install-the-dac-command-one-time-user-owned-symlink)). From inside a
+Git project, using this clean checkout (`dac init` with no flags in a terminal is interactive: path,
+package name, provider, optional confirmed `git init`, then a preview and a `[y/N]` before any write):
 
 ```
-node <clone>/bin/dac.mjs init --provider codex      # shows the dry-run, then applies
+node <clone>/bin/dac.mjs init                       # interactive (terminal only)
+node <clone>/bin/dac.mjs init --provider codex      # non-interactive: shows the dry-run, then applies
+node <clone>/bin/dac.mjs update                     # bootstrap update for the installed project
 node <clone>/bin/dac.mjs start                      # foreground custodian (Ctrl-C stops)
 node <clone>/bin/dac.mjs status [--json]
 node <clone>/bin/dac.mjs sdd plan --handoff <ID>    # then: sdd apply --handoff <ID>; sdd verify --project <ID>

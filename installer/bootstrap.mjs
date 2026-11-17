@@ -23,6 +23,13 @@ const SHARED_PROVIDERS = ['codex', 'cursor']; // owners of the neutral AGENTS.md
 const HANDOFF_PROVIDERS = ['claude-code', 'codex']; // providers that can own the SDD handoff runtime (never cursor)
 export const STANDARD_PATH = '.dac/standard.json';
 export const SHARED_PATH = '.dac/shared.json';
+export const PROJECT_PATH = '.dac/project.json'; // optional managed record: { schema, package_name } (never an SDD project_id)
+// package_name is ecosystem-neutral metadata (npm, PyPI, Cargo, Go modules, Maven/Gradle, ...), never a filesystem path.
+// Contract: 1..214 chars; no control/format/unassigned characters or backslashes; no leading/trailing whitespace; no leading '-';
+// '/'-separated segments must be non-empty and never '.' or '..'; no absolute path ('/x', 'C:/x', 'C:\\x').
+export const PACKAGE_NAME_RULE = 'a non-empty name of at most 214 characters without control characters, backslashes, leading/trailing whitespace, a leading "-", an absolute path or "."/".." path segments';
+export const validPackageName = (n) => typeof n === 'string' && n.length >= 1 && n.length <= 214 && n === n.trim() && !/[\p{C}\\]/u.test(n) && !n.startsWith('-')
+  && !/^[A-Za-z]:\//.test(n) && n.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
 const INSTALLERS = { 'claude-code': claude, codex, cursor };
 const MANIFEST_PATHS = { 'claude-code': '.claude/dac-manifest.json', codex: '.codex/dac-manifest.json', cursor: '.cursor/dac-manifest.json' };
 const json = (o) => Buffer.from(JSON.stringify(o, null, 2) + '\n');
@@ -58,6 +65,11 @@ function parseStandard(v) {
     providers[p] = { adapter_version: r.adapter_version, context7: r.context7, optional_agents: sortStr(r.optional_agents), ...(withHandoff ? { sdd_handoff: true } : {}) };
   }
   return { schema: 1, standard_version: v.standard_version, standard_commit: v.standard_commit, providers };
+}
+
+function parseProject(v) {
+  if (!exactKeys(v, ['schema', 'package_name']) || v.schema !== 1 || !validPackageName(v.package_name)) bad('project record has unexpected shape or invalid package_name');
+  return { schema: 1, package_name: v.package_name };
 }
 
 function parseLedger(v) {
@@ -98,6 +110,9 @@ function readState(root) {
   }
   const standard = readRecord(root, STANDARD_PATH, parseStandard);
   const ledger = readRecord(root, SHARED_PATH, parseLedger);
+  const project = readRecord(root, PROJECT_PATH, parseProject);
+  if (project.error) conflicts.push({ path: PROJECT_PATH, reason: project.error });
+  if (project.value && !providers.size) conflicts.push({ path: PROJECT_PATH, reason: 'project record exists without an installed provider' });
   if (standard.error) conflicts.push({ path: STANDARD_PATH, reason: standard.error });
   if (ledger.error) conflicts.push({ path: SHARED_PATH, reason: ledger.error });
   const installed = sortStr([...providers.keys()]);
@@ -113,7 +128,7 @@ function readState(root) {
     else if (entry && !same(entry.owners, derived)) conflicts.push({ path: SHARED_PATH, reason: 'shared ledger owners disagree with provider manifests' });
     else if (!derived.length && entry) conflicts.push({ path: SHARED_PATH, reason: 'shared ledger tracks AGENTS.md without an owning provider' });
   }
-  return { providers, installed, standard, ledger, entry, conflicts };
+  return { providers, installed, standard, ledger, project, entry, conflicts };
 }
 
 // ---- planning --------------------------------------------------------------
@@ -167,7 +182,7 @@ function planSharedAgents(root, state, finalSet, claimed) {
   return { actions, conflicts, ledgerBuf };
 }
 
-function compose(root, state, src, finalSet, optionsFor, { requireSameCommit }) {
+function compose(root, state, src, finalSet, optionsFor, { requireSameCommit, packageName }) {
   const conflicts = [...state.conflicts];
   const actions = [];
   const claimed = new Set();
@@ -194,7 +209,10 @@ function compose(root, state, src, finalSet, optionsFor, { requireSameCommit }) 
   actions.push(...shared.actions);
   conflicts.push(...shared.conflicts);
   const desiredStandard = finalSet.length ? json({ schema: 1, standard_version: src.version, standard_commit: src.head, providers: Object.fromEntries(sortStr(finalSet).map((p) => [p, providerRecords[p]])) }) : null;
-  for (const [path, desired, existing] of [[SHARED_PATH, shared.ledgerBuf, state.ledger], [STANDARD_PATH, desiredStandard, state.standard]]) {
+  // package_name: undefined keeps the current record (or none); a string sets it. The record is bootstrap-owned and canonical.
+  const desiredProject = packageName !== undefined ? json({ schema: 1, package_name: packageName }) : (state.project.value ? state.project.buf : null);
+  const records = [[SHARED_PATH, shared.ledgerBuf, state.ledger], ...(state.project.error ? [] : [[PROJECT_PATH, desiredProject, state.project]]), [STANDARD_PATH, desiredStandard, state.standard]];
+  for (const [path, desired, existing] of records) {
     const r = planRecord(root, path, desired, existing);
     if (r.conflict) conflicts.push(r.conflict);
     else if (r.action) actions.push(r.action);
@@ -239,6 +257,10 @@ function planUninstall(root, state, provider, src) {
     delete providers[provider];
     const desired = remaining.length ? json({ ...rec, providers }) : null;
     const r = planRecord(root, STANDARD_PATH, desired, state.standard);
+    if (r.conflict) conflicts.push(r.conflict); else if (r.action && r.action.op !== 'unchanged') actions.push(r.action);
+  }
+  if (state.project.value && !remaining.length) {
+    const r = planRecord(root, PROJECT_PATH, null, state.project);
     if (r.conflict) conflicts.push(r.conflict); else if (r.action && r.action.op !== 'unchanged') actions.push(r.action);
   }
   void src;
@@ -291,15 +313,16 @@ function commit(root, src, state, { actions, conflicts }, finalSet, { dryRun, fa
   return summarize(okStatus, actions, conflicts, src, finalSet);
 }
 
-export function apply({ target, providers, options = {}, dryRun = false, faultAfter = null, hooks = null }) {
+export function apply({ target, providers, options = {}, packageName, dryRun = false, faultAfter = null, hooks = null }) {
   const requested = checkProviders(providers);
+  if (packageName !== undefined && !validPackageName(packageName)) throw new AdapterError('PACKAGE_NAME', `package name must be ${PACKAGE_NAME_RULE}`);
   const { src, root, state } = begin(target);
   const finalSet = sortStr(new Set([...state.installed, ...requested]));
   const opts = norm(options);
   checkHandoff(requested, opts);
   const optionsFor = (p) => (requested.includes(p) ? forProvider(p, opts) : state.providers.get(p).options);
   checkSingleOwner(finalSet, optionsFor);
-  const plan = compose(root, state, src, finalSet, optionsFor, { requireSameCommit: true });
+  const plan = compose(root, state, src, finalSet, optionsFor, { requireSameCommit: true, packageName });
   // pruneDirs only removes directories emptied by this transaction's managed removals (e.g. disabling the handoff runtime).
   return commit(root, src, state, plan, finalSet, { dryRun, faultAfter, hooks, pruneDirs: true, okStatus: 'APPLIED' });
 }
@@ -363,7 +386,7 @@ export function verify({ target }) {
 // so re-running init reuses the existing engine with the recorded options. Never writes; conflicts are reported, not interpreted.
 export function installedOptions({ target }) {
   const state = readState(resolveTarget(target));
-  return { providers: Object.fromEntries([...state.providers].filter(([, s]) => !s.broken).map(([p, s]) => [p, s.options])), broken: [...state.providers].filter(([, s]) => s.broken).map(([p]) => p), conflicts: state.conflicts };
+  return { packageName: state.project.value?.package_name ?? null, providers: Object.fromEntries([...state.providers].filter(([, s]) => !s.broken).map(([p, s]) => [p, s.options])), broken: [...state.providers].filter(([, s]) => s.broken).map(([p]) => p), conflicts: state.conflicts };
 }
 
 // ---- CLI -------------------------------------------------------------------
@@ -381,13 +404,14 @@ Options:
   --optional-agent <id>    claude-code only: also generate an optional catalog agent
   --sdd-handoff            claude-code or codex (one provider per project): install the SDD input-handoff runtime
                            (.dac/runtime/sdd-handoff, submit-only MCP proxy; .mcp.json for claude-code, .codex/config.toml entry for codex)
+  --package-name <name>    apply: record the project's package name in the managed .dac/project.json (not an SDD project_id)
   --dry-run                Report actions without writing
   --json                   Machine-readable output
 Requires this checkout to be a clean Git repository with a verifiable HEAD.`;
 
 function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const o = { cmd, providers: [], context7: false, sddHandoff: false, optionalAgents: [], dryRun: false, json: false, target: undefined };
+  const o = { cmd, providers: [], context7: false, sddHandoff: false, packageName: undefined, optionalAgents: [], dryRun: false, json: false, target: undefined };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a === '--context7') o.context7 = true;
@@ -396,12 +420,14 @@ function parseArgs(argv) {
     else if (a === '--json') o.json = true;
     else if (a === '--provider' && rest[i + 1]) o.providers.push(...rest[++i].split(','));
     else if (a === '--optional-agent' && rest[i + 1]) o.optionalAgents.push(rest[++i]);
+    else if (a === '--package-name' && rest[i + 1] && o.packageName === undefined) o.packageName = rest[++i];
     else if (a === '--target' && rest[i + 1]) o.target = resolve(rest[++i]);
     else return { usage: `Unknown or incomplete option: ${a}` };
   }
   if (!['plan', 'apply', 'verify', 'update', 'uninstall'].includes(cmd)) return { usage: cmd === '--help' || cmd === '-h' ? '' : 'Unknown command', help: cmd === '--help' || cmd === '-h' };
   if (cmd !== 'plan' && !o.target) return { usage: '--target is required' };
   if (cmd === 'apply' && !o.providers.length) return { usage: '--provider is required' };
+  if (o.packageName !== undefined && cmd !== 'apply') return { usage: '--package-name is only valid for apply' };
   if (cmd === 'uninstall' && o.providers.length !== 1) return { usage: 'uninstall takes exactly one --provider' };
   if (['verify', 'update'].includes(cmd) && (o.providers.length || o.context7 || o.optionalAgents.length || o.sddHandoff)) return { usage: `${cmd} does not take provider or template options` };
   return o;
@@ -424,7 +450,7 @@ function main(argv) {
       out(r, `${r.status}${r.findings.map((f) => `\n${f.kind.toUpperCase()} ${f.path}: ${f.reason}`).join('')}`);
       return r.status === 'OK' ? 0 : 1;
     }
-    const r = o.cmd === 'apply' ? apply({ target: o.target, providers: o.providers, options, dryRun: o.dryRun })
+    const r = o.cmd === 'apply' ? apply({ target: o.target, providers: o.providers, options, packageName: o.packageName, dryRun: o.dryRun })
       : o.cmd === 'update' ? update({ target: o.target, dryRun: o.dryRun }) : uninstall({ target: o.target, provider: o.providers[0], dryRun: o.dryRun });
     out(r, line(r));
     return r.status === 'CONFLICT' ? 1 : 0;
