@@ -7,13 +7,15 @@ import { REPO_ROOT } from '../../../installer/lib/run.mjs';
 import { validateSchema } from '../../../installer/lib/schema.mjs';
 import { sha256, AdapterError } from '../canonical.mjs';
 import { inspect } from '../apply.mjs';
+import { checkProject } from '../../../installer/lib/sdd.mjs';
 
 export class WriterError extends AdapterError {
   constructor(code, message, details = {}) { super(code, message); this.details = details; }
 }
 
 export const SDD_ROOT = '.sdd';
-export const ARTIFACT_NAMES = Object.freeze(['constitution', 'specify']);
+export const ARTIFACT_NAMES = Object.freeze(['constitution', 'specify', 'project']);
+export const MARKDOWN_NAMES = Object.freeze(['constitution', 'specify']); // `project` has no derived Markdown
 export const MAX_ARTIFACT_BYTES = 256 * 1024;
 export const ID_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const SHA_RE = /^[a-f0-9]{64}$/;
@@ -27,6 +29,7 @@ const REGISTRY = new Map([['common.schema.json', load('common.schema.json')]]);
 const SCHEMAS = {
   constitution: load('sdd-constitution.schema.json'),
   specify: load('sdd-specify.schema.json'),
+  project: load('sdd-project.schema.json'),
   receipt: load('sdd-write-receipt.schema.json'),
 };
 export const schemaErrors = (kind, data) => validateSchema(SCHEMAS[kind], data, REGISTRY).map((e) => ({ code: e.code, rule: 'schema', path: e.path, message: e.message }));
@@ -91,7 +94,38 @@ export function validateSpecify(doc, projectId) {
   return { errors, summary: { requirements: doc.requirements.length, acceptance_criteria: doc.acceptance_criteria.length, requirement_to_criterion_links: links } };
 }
 
-export const VALIDATORS = { constitution: validateConstitution, specify: validateSpecify };
+// The persisted `project` artifact is the canonical SDD Plan/Tasks record (sdd-project.schema.json + checkProject()). It is
+// DOCUMENTATION ONLY: it can never claim started work or approvals (persisting it authorizes nothing; `dac implement` has its
+// own pre-implementation gate). Its `id` is the SDD project id and is unrelated to the bootstrap package_name record.
+let SDD_CTX = null;
+const sddCtx = () => (SDD_CTX ??= {
+  workflow: JSON.parse(readFileSync(join(REPO_ROOT, 'standards', 'sdd', 'sdd-workflow.json'), 'utf8')),
+  agentMap: JSON.parse(readFileSync(join(REPO_ROOT, 'standards', 'sdd', 'sdd-agent-map.json'), 'utf8')),
+});
+export function validateProject(doc, projectId) {
+  const errors = schemaErrors('project', doc);
+  if (errors.length) return { errors, summary: null };
+  const { validation, ...rest } = doc; // validated_by may legitimately be "" while NOT-RUN
+  textErrors(rest, '$', errors);
+  textErrors(validation.evidence, '$.validation.evidence', errors);
+  if (doc.id !== projectId) errors.push(sem('project-mismatch', '$.id', 'project id does not match the requested project'));
+  if (doc.milestone_ref !== undefined) errors.push(sem('milestone-unsupported', '$.milestone_ref', 'milestone_ref is not supported in a persisted project artifact'));
+  if (doc.approvals.length) errors.push(sem('documentation-only', '$.approvals', 'a persisted project artifact must not record approvals (documentation never authorizes implementation)'));
+  if (doc.files_changed.length) errors.push(sem('documentation-only', '$.files_changed', 'a persisted project artifact must not list changed files'));
+  if (doc.validation.validation_result !== 'NOT-RUN' || doc.validation.evidence.length) errors.push(sem('documentation-only', '$.validation', 'a persisted project artifact must be NOT-RUN without evidence'));
+  for (const p of ['implement', 'converge', 'independent-validation']) if (doc.completed_phases.includes(p)) errors.push(sem('documentation-only', '$.completed_phases', `phase "${p}" cannot be recorded as completed in a persisted project artifact`));
+  doc.tasks.forEach((t, i) => {
+    if (t.status !== 'planned') errors.push(sem('documentation-only', `$.tasks[${i}].status`, `task "${t.id}" must be "planned"`));
+    (t.validation_commands ?? []).forEach((c, j) => {
+      const at = `$.tasks[${i}].validation_commands[${j}]`;
+      if (/[\r\n]/.test(c)) errors.push(sem('command-multiline', at, 'a validation command must be a single line'));
+    });
+  });
+  for (const e of checkProject(doc, { ...sddCtx(), projectFile: join(REPO_ROOT, 'project.json'), root: REPO_ROOT })) errors.push({ code: e.code, rule: e.rule, path: e.path, message: e.message });
+  return { errors, summary: { tasks: doc.tasks.length, requirements: doc.requirements.length, acceptance_criteria: doc.acceptance_criteria.length } };
+}
+
+export const VALIDATORS = { constitution: validateConstitution, specify: validateSpecify, project: validateProject };
 
 // ---- derived Markdown (optional, OFF by default, never authoritative) --------------------------------
 const md = (s) => s.replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]<>#|~!&]/g, '\\$&');
@@ -120,7 +154,7 @@ export const artifactPath = (pid, name, ext) => `${SDD_ROOT}/artifacts/${pid}/${
 export const receiptPath = (pid, seq, digest) => `${SDD_ROOT}/receipts/${pid}/${String(seq).padStart(6, '0')}-${digest.slice(0, 12)}.json`;
 export const consumedPath = (pid, nonce) => `${SDD_ROOT}/consumed/${pid}/${nonce}.json`;
 export const lockPath = (pid) => `${SDD_ROOT}/locks/${pid}.lock`;
-export const artifactPaths = (pid) => ARTIFACT_NAMES.flatMap((n) => [artifactPath(pid, n, 'json'), artifactPath(pid, n, 'md')]);
+export const artifactPaths = (pid) => ARTIFACT_NAMES.flatMap((n) => (MARKDOWN_NAMES.includes(n) ? [artifactPath(pid, n, 'json'), artifactPath(pid, n, 'md')] : [artifactPath(pid, n, 'json')]));
 
 const FORBIDDEN_ROOTS = ['.dac', '.git', '.specify', 'specs', '.github'];
 const CODE_EXT = /\.(?:[cm]?[jt]sx?|sh|bash|zsh|py|rb|pl|php|ps1|bat|cmd|exe|dll|so|dylib|yml|yaml|toml|ini|env|sql)$/i;

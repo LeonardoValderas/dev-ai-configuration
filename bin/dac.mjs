@@ -4,6 +4,8 @@
 //   update -> installer/bootstrap.mjs update (dry-run preview, then the same engine)
 //   start/status/stop -> adapters/shared/sdd-handoff/custodian-cli.mjs (start is FOREGROUND; no daemon)
 //   sdd    -> adapters/shared/sdd-writer/cli.mjs (child process; terminal approval stays writer-owned; exit codes pass through)
+//   implement/review -> adapters/shared/sdd-run (verified persisted task -> trusted-terminal authorization -> isolated worktree ->
+//            injectable runner -> blocking audit; independent read-only review). Runners are injected by tests; nothing here probes a provider.
 // Exit codes: 0 ok, 1 failure, 2 usage; `sdd` passes the writer's code through (including 3).
 import { realpathSync, lstatSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -14,6 +16,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { apply, update, installedOptions, verify, validPackageName, PACKAGE_NAME_RULE, STANDARD_PATH } from '../installer/bootstrap.mjs';
 import { main as custodian } from '../adapters/shared/sdd-handoff/custodian-cli.mjs';
 import { AdapterError } from '../adapters/shared/canonical.mjs';
+import { implementTask } from '../adapters/shared/sdd-run/implement.mjs';
+import { reviewTask } from '../adapters/shared/sdd-run/review.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WRITER = join(HERE, '..', 'adapters/shared/sdd-writer/cli.mjs');
@@ -31,6 +35,12 @@ const USAGE = `Usage: dac <command> [options]
   sdd plan   --handoff <ID> [--json]    Print the canonical plan (no writes)   (or --input <file>)
   sdd apply  --handoff <ID> [--json]    Apply after approval on the controlling terminal   (or --input <file>)
   sdd verify --project <ID> [--json]    Re-check artifacts against receipts (no writes)
+  implement <task-id> [--project <ID>] [--preserve-dirty]
+                                        Implement one persisted SDD task in an automatically created isolated branch/worktree after a
+                                        trusted-terminal authorization of the exact task, base, scope and prompt; a blocking audit follows.
+                                        Never commits, merges, publishes or cleans up. Dirty projects need --preserve-dirty (changes stay untouched).
+  review <task-id> [--project <ID>] [--run <run-id>]
+                                        Independent read-only review of one audited run, bound to its exact audit/diff hash
 Project root: init uses --path/the typed path, else the nearest ancestor containing ${STANDARD_PATH}, else the Git top-level;\nother commands use the nearest ancestor of the current directory containing ${STANDARD_PATH}.`;
 
 class Usage extends Error {}
@@ -333,9 +343,25 @@ function sdd(args, cwd) {
   return r.status ?? 1;
 }
 
+const taskArg = (cmd, args) => { const [id, ...rest] = args; if (!id || id.startsWith('-')) fail(`${cmd} needs a task id`); return [id, rest]; };
+
+async function implementCmd(args, cwd, deps) {
+  const [taskId, rest] = taskArg('implement', args);
+  const f = parseFlags(rest, { '--project': 'value', '--preserve-dirty': 'bool' });
+  return implementTask({ root: projectRoot(cwd), taskId, flags: { project: f['--project'], preserveDirty: f['--preserve-dirty'] === true }, deps });
+}
+
+async function reviewCmd(args, cwd, deps) {
+  const [taskId, rest] = taskArg('review', args);
+  const f = parseFlags(rest, { '--project': 'value', '--run': 'value' });
+  return reviewTask({ root: projectRoot(cwd), taskId, flags: { project: f['--project'], run: f['--run'] }, deps });
+}
+
 export { undoGitInit, gitFingerprint, suggestPackageName }; // exported for tests only
 
-export async function main(argv, cwd = process.cwd(), io = defaultIo()) {
+// INTERNAL TEST SEAM. `deps` ({ terminal, implementRunner, reviewRunner, stateDir, clock, random, log }) exists only so tests can
+// inject simulated runners. The production entry (`main`, used by the CLI below) never accepts or forwards it: it always passes {}.
+export async function mainWithDeps(argv, cwd, io, deps) {
   const [cmd, ...rest] = argv;
   try {
     if (cmd === '--help' || cmd === '-h') { console.log(USAGE); return 0; }
@@ -345,12 +371,19 @@ export async function main(argv, cwd = process.cwd(), io = defaultIo()) {
     if (cmd === 'status') return await status(rest, cwd);
     if (cmd === 'stop') return await stop(rest, cwd);
     if (cmd === 'sdd') return sdd(rest, cwd);
+    if (cmd === 'implement') return await implementCmd(rest, cwd, deps);
+    if (cmd === 'review') return await reviewCmd(rest, cwd, deps);
     return fail('Unknown command');
   } catch (e) {
     if (e instanceof Usage) { console.error(`${e.message}\n${USAGE}`); return 2; }
     console.error(e instanceof AdapterError ? `${e.code}: ${e.message}` : `dac failure: ${e.message}`);
     return 1;
   }
+}
+
+// Production entry point: no dependency injection is possible through it (a 4th argument is ignored).
+export async function main(argv, cwd = process.cwd(), io = defaultIo()) {
+  return mainWithDeps(argv, cwd, io, {});
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {

@@ -199,7 +199,7 @@ test('[PROC] the exact generated launcher starts the real proxy from the project
   const m = rpcOn(launch({ DAC_SDD_RUNTIME_DIR: 'relative/dir', TMPDIR: join(scratch, 'elsewhere') }));
   const init = await m.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } }); assert.equal(init.result.serverInfo.name, SERVER_NAME);
   const tl = await m.rpc('tools/list', {}); assert.deepEqual(tl.result.tools.map((x) => x.name), [CODEX_TOOL]);
-  const props = Object.keys(tl.result.tools[0].inputSchema.properties).sort(); assert.deepEqual(props, ['constitution', 'markdown', 'operation', 'project_id', 'specify']);
+  const props = Object.keys(tl.result.tools[0].inputSchema.properties).sort(); assert.deepEqual(props, ['constitution', 'markdown', 'operation', 'project', 'project_id', 'specify']);
   assert.equal(tl.result.tools[0].inputSchema.additionalProperties, false);
   for (const bad of [{ ...envelope(), target: '/etc' }, { ...envelope(), runtime_dir: '/tmp' }, { ...envelope(), apply: true }]) { const r = await m.rpc('tools/call', { name: CODEX_TOOL, arguments: bad }); assert.equal(r.result.isError, true); assert.equal(JSON.parse(r.result.content[0].text).code, 'INPUT'); }
   for (const other of ['sdd_handoff_apply', 'shell', 'write_file']) assert.equal((await m.rpc('tools/call', { name: other, arguments: {} })).error.code, -32602);
