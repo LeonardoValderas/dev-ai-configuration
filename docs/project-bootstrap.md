@@ -128,6 +128,23 @@ entirely between the two checks is not detectable.
 }
 ```
 
+`.dac/project.json` (optional, canonical JSON, written by `dac init --package-name` or
+`node installer/bootstrap.mjs apply --package-name <name>`):
+
+```json
+{ "schema": 1, "package_name": "my-package" }
+```
+
+It is a bootstrap-managed record in the same journal as the other records: created and replaced
+atomically with `apply`, preserved by `update`, checked by `verify`, removed with the last provider
+on `uninstall`, and restored by rollback. `package_name` is ecosystem-neutral metadata (npm, Python, Cargo, Go, Maven/Gradle names;
+1-214 characters, no control characters, backslashes, leading/trailing whitespace, absolute paths or
+`.`/`..` segments), never a filesystem path and never an SDD `project_id`; bootstrap does not read or
+edit ecosystem manifests (the `dac` facade only reads them to suggest a prompt default) and `.sdd/` is not touched. Installs
+without it remain valid. A non-canonical or invalid record, or one without an installed provider,
+is drift and blocks overwrite. Changing the value is an explicit `apply --package-name` (the `dac`
+facade additionally requires a preview confirmation).
+
 Records are validated strictly: unknown keys, non-canonical bytes, bad hashes, providers that
 disagree with the provider manifests, or shared owners that disagree with them are drift.
 Limitation: the records are integrity-checked for shape and consistency, not signed; someone who

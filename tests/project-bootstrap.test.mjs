@@ -436,3 +436,62 @@ test('Context7 flag is rejected for update/verify and optional agents only apply
   assert.equal(codeOf(() => apply(s, t, ['codex'], { options: { optionalAgents: ['x'] } })), 'OPTIONS');
   assert.deepEqual(files(t), []);
 });
+
+// ---- managed .dac/project.json (package_name) ----------------------------------------------------
+test('project record: apply --package-name is journaled, verified, preserved by update, removed with the last provider, and absent installs stay valid', async () => {
+  const s = await source(); const t = target();
+  assert.equal(apply(s, t, ['codex']).status, 'APPLIED');
+  assert.ok(!files(t).includes('.dac/project.json')); assert.equal(s.api.verify({ target: t }).status, 'OK'); // existing install without it stays valid
+  assert.equal(s.api.installedOptions({ target: t }).packageName, null);
+  const r = apply(s, t, ['codex'], { packageName: 'my-pkg' });
+  assert.equal(r.status, 'APPLIED'); assert.deepEqual(r.created, ['.dac/project.json']);
+  assert.equal(read(t, '.dac/project.json'), '{\n  "schema": 1,\n  "package_name": "my-pkg"\n}\n');
+  assert.equal(s.api.verify({ target: t }).status, 'OK'); assert.equal(s.api.installedOptions({ target: t }).packageName, 'my-pkg');
+  assert.equal(apply(s, t, ['codex'], { packageName: 'my-pkg' }).status, 'UNCHANGED');
+  assert.equal(apply(s, t, ['codex']).status, 'UNCHANGED'); // omitted keeps the record
+  const same = snapshot(t);
+  assert.equal(s.api.update({ target: t }).status, 'UNCHANGED'); assert.deepEqual(snapshot(t), same);
+  const ch = apply(s, t, ['codex'], { packageName: 'other', dryRun: true }); assert.deepEqual(ch.updated, ['.dac/project.json']); assert.deepEqual(snapshot(t), same);
+  assert.equal(apply(s, t, ['codex'], { packageName: 'other' }).status, 'APPLIED');
+  const withCursor = apply(s, t, ['cursor']); assert.equal(withCursor.status, 'APPLIED'); assert.equal(readJ(t, '.dac/project.json').package_name, 'other');
+  assert.equal(s.api.uninstall({ target: t, provider: 'codex' }).status, 'REMOVED'); assert.ok(files(t).includes('.dac/project.json')); // another owner remains
+  assert.equal(s.api.uninstall({ target: t, provider: 'cursor' }).status, 'REMOVED'); assert.ok(!existsSync(join(t, '.dac')));
+});
+
+test('project record: invalid names and the engine CLI flag; drift blocks overwrite, update and uninstall with zero writes', async () => {
+  const s = await source(); const t = target();
+  for (const bad of ['', ' ', ' a', 'a ', 'a\nb', 'a\0b', '/abs', '../x', 'a/../b', 'a\\b', '-', 'x'.repeat(215), 5]) assert.equal(codeOf(() => apply(s, t, ['codex'], { packageName: bad })), 'PACKAGE_NAME');
+  assert.deepEqual(snapshot(t), {});
+  assert.equal(codeOf(() => apply(s, t, ['codex'], { packageName: 'Upper.Case_x/y' })), null, 'mixed case and safe slashes are valid');
+  const c0 = s.cli('uninstall', '--provider', 'codex', '--target', t); assert.equal(c0.status, 0, c0.stderr);
+  const c = s.cli('apply', '--provider', 'codex', '--target', t, '--package-name', '@scope/my.pkg'); assert.equal(c.status, 0, c.stderr);
+  assert.equal(readJ(t, '.dac/project.json').package_name, '@scope/my.pkg');
+  assert.equal(s.cli('verify', '--target', t, '--package-name', 'x').status, 2); assert.equal(s.cli('update', '--target', t, '--package-name', 'x').status, 2);
+  for (const mutate of [(p) => writeFileSync(p, '{"schema":1,"package_name":"hand"}'), (p) => writeFileSync(p, '{"schema":1,"package_name":"a","project_id":"P"}\n'), (p) => writeFileSync(p, 'junk')]) {
+    const p = join(t, '.dac/project.json'); const keep = readFileSync(p); mutate(p);
+    const drifted = snapshot(t);
+    assert.equal(s.api.verify({ target: t }).status, 'DRIFT');
+    assert.equal(apply(s, t, ['codex'], { packageName: 'new' }).status, 'CONFLICT');
+    assert.equal(s.api.update({ target: t }).status, 'CONFLICT');
+    assert.equal(s.api.uninstall({ target: t, provider: 'codex' }).status, 'CONFLICT');
+    assert.deepEqual(snapshot(t), drifted); writeFileSync(p, keep);
+  }
+  assert.equal(s.api.verify({ target: t }).status, 'OK');
+  const orphan = target(); mkdirSync(join(orphan, '.dac')); writeFileSync(join(orphan, '.dac/project.json'), '{\n  "schema": 1,\n  "package_name": "x"\n}\n');
+  const before = snapshot(orphan); assert.equal(apply(s, orphan, ['codex'], { packageName: 'y' }).status, 'CONFLICT'); assert.deepEqual(snapshot(orphan), before);
+});
+
+test('project record: an injected fault rolls everything back, including the record, with no partial state', async () => {
+  const s = await source(); const t = target();
+  mkdirSync(join(t, '.sdd')); writeFileSync(join(t, '.sdd/keep'), 'sdd');
+  const before = snapshot(t);
+  for (const n of [1, 3, 99]) {
+    const e = (() => { try { return apply(s, t, ['codex'], { packageName: 'p', faultAfter: n }); } catch (x) { return x; } })();
+    if (n === 99) { assert.equal(e.status, 'APPLIED'); break; }
+    assert.equal(e.code, 'APPLY_FAILED'); assert.deepEqual(snapshot(t), before);
+  }
+  const mid = snapshot(t); assert.ok(mid['.dac/project.json']);
+  const f = (() => { try { return apply(s, t, ['codex'], { packageName: 'q', faultAfter: 1 }); } catch (x) { return x; } })();
+  assert.equal(f.code, 'APPLY_FAILED'); assert.deepEqual(snapshot(t), mid);
+  assert.equal(readFileSync(join(t, '.sdd/keep'), 'utf8'), 'sdd');
+});
