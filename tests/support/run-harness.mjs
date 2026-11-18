@@ -84,15 +84,15 @@ export function snapshot(root, skip = ['.git']) {
 }
 
 // ---- simulated runners (never spawn anything) ----
-const profile = (role, network = false) => ({ id: `sim-${role}`, role, sandbox: role === 'implement' ? 'workspace-write' : 'read-only', approval: role === 'implement' ? 'on-request' : 'never', mcp: 'none', network: role === 'implement' ? network : false, bypass: false, argv: ['sim', role] });
+const profile = (role, network = false, model) => ({ ...(model === undefined ? {} : { model }), id: `sim-${role}`, role, sandbox: role === 'implement' ? 'workspace-write' : 'read-only', approval: role === 'implement' ? 'on-request' : 'never', mcp: 'none', network: role === 'implement' ? network : false, bypass: false, argv: ['sim', role] });
 export const okResult = (files = [], o = {}) => ({ schema_version: '1.0', kind: 'result', execution_status: 'COMPLETE', validation_result: 'PASS', files_changed: files, evidence: [{ description: 'simulated run', command: 'node --test', output_summary: '1 passed' }], warnings: [], unresolved_blockers: [], ...o });
 export function implRunner(effect = () => {}, result = null, o = {}) {
-  const r = { id: o.id ?? 'sim-implement', role: o.role ?? 'implement', calls: [], describe: ({ network } = {}) => ({ ...profile('implement', network), ...(o.profile ?? {}) }),
+  const r = { id: o.id ?? 'sim-implement', role: o.role ?? 'implement', calls: [], describe: ({ network, model } = {}) => ({ ...profile('implement', network, model), ...(o.profile ?? {}) }),
     async run(args) { r.calls.push(args); await effect(args.cwd, args); return { result: typeof result === 'function' ? result(args.cwd) : result ?? okResult() }; } };
   return r;
 }
 export function reviewRunner(effect = () => {}, result = null, o = {}) {
-  const r = { id: o.id ?? 'sim-review', role: o.role ?? 'review', calls: [], describe: () => ({ ...profile('review'), ...(o.profile ?? {}) }),
+  const r = { id: o.id ?? 'sim-review', role: o.role ?? 'review', calls: [], describe: ({ model } = {}) => ({ ...profile('review', false, model), ...(o.profile ?? {}) }),
     async run(args) { r.calls.push(args); await effect(args.cwd, args); return { result: typeof result === 'function' ? result(args) : result ?? okResult([]) }; } };
   return r;
 }

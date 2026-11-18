@@ -9,7 +9,7 @@ import { ID_RE } from '../sdd-writer/artifacts.mjs';
 import { RunError, git, repoInfo, dirtyEntries, planBaseline, applyBaseline, createWorktree, mainFingerprint, metaFingerprint, worktreeMetaFingerprint, sha256, MAX_FILE_BYTES, MAX_TOTAL_BYTES, MAX_CHANGED_FILES } from './git.mjs';
 import { loadContext, buildContract, buildPrompt, listSddProjects, contractErrors, digestOf, PROTECTED_DIRS, PROTECTED_FILES } from './context.mjs';
 import { auditWorktree } from './audit.mjs';
-import { assertSafeProfile, codexRunner } from './runners.mjs';
+import { assertSafeProfile, codexRunner, validateModel, modelSelection, modelLabel } from './runners.mjs';
 import { stateRoot, taskDir, assertStateOutside, writeOnce, readJson, withLock, listRuns, evidenceFingerprint } from './store.mjs';
 
 export function resolveProjectId(root, explicit) {
@@ -61,7 +61,8 @@ function prepare({ root, pid, taskId, flags, state, deps }) {
   const runner = deps.implementRunner ?? codexRunner('implement');
   if (runner.role !== 'implement') throw new RunError('UNSAFE_PROFILE', 'the implementation runner must have role "implement"');
   const network = ctx.task.needs_network === true;
-  const profile = assertSafeProfile(runner.describe({ network }), 'implement', network);
+  const model = validateModel(flags.model); // opaque user-selected value; never replaced, normalized or defaulted
+  const profile = assertSafeProfile(runner.describe({ network, model }), 'implement', network, model);
   const authz = {
     kind: 'dac-implement-authorization', schema: 1, project_id: pid, task_id: taskId, target: targetIdentity(root),
     artifacts: ctx.artifacts, task: ctx.task, dependencies: dependencies.map(({ task_id, run_id, review_id }) => ({ task_id, run_id, review_id })),
@@ -70,9 +71,9 @@ function prepare({ root, pid, taskId, flags, state, deps }) {
     worktree: { parent: dir, branch_prefix: `dac/${pid}/${taskId}/` },
     scope: { allowed_paths: contract.allowed_paths, prohibited_paths: contract.prohibited_paths, protected: [...PROTECTED_DIRS, ...PROTECTED_FILES], exact_path_only: ['manifests, lockfiles, CI and environment files', 'deletions', 'mode changes', 'new executables'], ceilings: { files: MAX_CHANGED_FILES, file_bytes: MAX_FILE_BYTES, total_bytes: MAX_TOTAL_BYTES } },
     validation_commands: contract.validation_commands, network: { requested_by_task: network, authorized_if_approved: network },
-    prompt_sha256: sha256(prompt), contract_sha256: digestOf(contract), runner_profile: profile,
+    prompt_sha256: sha256(prompt), contract_sha256: digestOf(contract), model: modelSelection(model), runner_profile: profile,
   };
-  return { ctx, contract, prompt, info, dir, dirty, baseline, dependencies, runner, network, profile, authz, digest: digestOf(authz) };
+  return { ctx, contract, prompt, info, dir, dirty, baseline, dependencies, runner, network, model, profile, authz, digest: digestOf(authz) };
 }
 
 const summary = (p, root) => {
@@ -89,6 +90,7 @@ const summary = (p, root) => {
     `  network:      ${a.network.authorized_if_approved ? 'ENABLED (the task declares dependency/network needs)' : 'disabled'}`,
     `  dependencies: ${a.dependencies.length ? a.dependencies.map((d) => `${d.task_id} (run ${d.run_id}, review ${d.review_id})`).join(', ') : 'none'}`,
     `  runner:       ${a.runner_profile.id} sandbox=${a.runner_profile.sandbox} approval=${a.runner_profile.approval} mcp=${a.runner_profile.mcp} bypass=${a.runner_profile.bypass}`,
+    `  model:        ${modelLabel(p.model)}`,
     `  artifacts:    constitution ${a.artifacts.constitution_sha256.slice(0, 12)}  specify ${a.artifacts.specify_sha256.slice(0, 12)}  project ${a.artifacts.project_sha256.slice(0, 12)}  receipts ${a.artifacts.receipts.count}@${a.artifacts.receipts.latest_sha256.slice(0, 12)}`,
     `  prompt/context hash: ${a.prompt_sha256.slice(0, 12)} / ${a.contract_sha256.slice(0, 12)}`, `  authorization digest: ${p.digest}`,
     '  Nothing is committed, merged, published or cleaned up by dac. Persisting documentation did not authorize this.');
@@ -160,14 +162,14 @@ export async function implementTask({ root, taskId, flags = {}, deps = {} }) {
     const run = {
       kind: 'dac-run', schema: 1, run_id: runId, project_id: pid, task_id: taskId, created_at: new Date(clock()).toISOString(), authorization_digest: p.digest,
       base_commit: base, branch, object_format: p.info.format, worktree: { path: wt.path, git_file: wt.gitFile }, artifacts: p.ctx.artifacts,
-      runner: { id: p.runner.id, profile: p.profile }, contract_sha256: p.authz.contract_sha256, prompt_sha256: p.authz.prompt_sha256,
+      runner: { id: p.runner.id, profile: p.profile, model: p.authz.model }, contract_sha256: p.authz.contract_sha256, prompt_sha256: p.authz.prompt_sha256,
       pre: { meta: metaFingerprint(root), wtmeta: worktreeMetaFingerprint(wt.path), main: mainFingerprint(root), evidence: evidenceFingerprint(state, root, p.dir, runId) }, dirty_preserved: p.dirty.length,
     };
     const runSha = writeOnce(join(runDir, 'run.json'), run);
     log(`run ${runId}: worktree ${wt.path}\n  branch ${branch}\n  launching ${p.runner.id} (sandboxed; the worktree is isolation, not a sandbox: the audit decides)`);
 
     let provider = null; let failure = null;
-    try { provider = await p.runner.run({ cwd: wt.path, prompt: p.prompt, contract: p.contract, contextDir: ctxDir, runDir, network: p.network, profile: p.profile }); } catch (e) { failure = e; }
+    try { provider = await p.runner.run({ cwd: wt.path, prompt: p.prompt, contract: p.contract, contextDir: ctxDir, runDir, network: p.network, model: p.model, profile: p.profile }); } catch (e) { failure = e; }
     const result = provider?.result ?? null;
     const resultErrors = result ? contractErrors('result', result) : [failure ? `runner failed: ${failure.message}` : 'the runner returned no result'];
     if (result) writeOnce(join(runDir, 'result.json'), result);

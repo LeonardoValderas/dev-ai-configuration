@@ -13,8 +13,10 @@ delegates to an existing component (`implement` and `review` delegate to `adapte
 | `dac status [--json]` | bootstrap `verify` + custodian `status` (read-only) |
 | `dac sdd plan\|apply --handoff <ID>` (or `--input <file>`) | `adapters/shared/sdd-writer/cli.mjs` |
 | `dac sdd verify --project <ID>` | `adapters/shared/sdd-writer/cli.mjs` |
-| `dac implement <task-id> [--project <ID>] [--preserve-dirty]` | `adapters/shared/sdd-run/implement.mjs`: verified persisted task, trusted-terminal authorization, automatic isolated branch/worktree, injectable runner, blocking audit (no approval flag exists; never commits, merges, publishes or cleans up) |
-| `dac review <task-id> [--project <ID>] [--run <run-id>]` | `adapters/shared/sdd-run/review.mjs`: separate read-only reviewer bound to the exact audit/diff hash |
+| `dac implement <task-id> [--project <ID>] [--preserve-dirty] [--model <model>]` | `adapters/shared/sdd-run/implement.mjs`: verified persisted task, trusted-terminal authorization, automatic isolated branch/worktree, injectable runner, blocking audit (no approval flag exists; never commits, merges, publishes or cleans up) |
+| `dac review <task-id> [--project <ID>] [--run <run-id>] [--model <model>]` | `adapters/shared/sdd-run/review.mjs`: separate read-only reviewer bound to the exact audit/diff hash |
+
+`--model <model>` (both commands) is passed unchanged to Codex as `--model <model>`; omitted, Codex inherits its configured model. Model availability is account-specific: you choose it, dac never falls back (see [dac-implement-review.md](dac-implement-review.md)).
 
 The existing CLIs (`installer/bootstrap.mjs`, the custodian CLI, the writer CLI, per-provider CLIs)
 are unchanged and remain usable directly. `dac` itself writes nothing global: no PATH, HOME or global

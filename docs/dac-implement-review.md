@@ -25,7 +25,18 @@ same handoff envelope (`project` is a new optional key next to `constitution` an
   ids are rejected), `validation_commands` (single-line strings, shown and bound at authorization; dac itself never runs
   them), `needs_network` (default false).
 
-## 2. `dac implement <task-id> [--project <id>] [--preserve-dirty]`
+## 2. `dac implement <task-id> [--project <id>] [--preserve-dirty] [--model <model>]`
+
+**Model selection (`--model`, also on `dac review`).** `dac implement t01 --model <supported-model>` passes exactly that value to
+Codex as `codex exec --model <supported-model> ...`. Which models work is **account-specific** (a model available to one
+Codex/ChatGPT account may be unsupported for another, and a second machine can inherit a different model from its own Codex
+configuration), so **you choose it; dac has no catalog, no default, no normalization and no fallback**. Without `--model` no
+`--model` argument is passed and Codex uses the model from its own configuration; the preview says so
+(`model: inherited from the Codex configuration`). The value must be a single non-empty word of at most 200 characters, without
+control characters, whitespace at the edges or a leading `-`. The model selection is part of the runner profile and therefore of the
+authorization digest (changing or adding/removing `--model` requires a new approval) and is stored in `authorization.json`,
+`run.json` and the review record. If Codex rejects the model, the run ends `RUNNER_FAILED` with the evidence kept, and the
+output shows a short, redacted excerpt of Codex's stderr plus the transcript path.
 
 1. **Project.** The nearest ancestor with `.dac/standard.json` (as for every command). The SDD project is the only persisted
    one, or `--project <id>` when several exist (ambiguity is an error, never a guess).
@@ -99,7 +110,11 @@ only; nothing outside the project and the Git metadata (for example your home di
 runner profile (a real sandbox) is the primary containment and the audit is the independent check; `.gitattributes`
 end-of-line/filter rules in a repository can make unchanged files look modified (fail-closed).
 
-## 5. `dac review <task-id> [--project <id>] [--run <run-id>]`
+## 5. `dac review <task-id> [--project <id>] [--run <run-id>] [--model <model>]`
+
+`--model` works as for `dac implement` (`dac review t01 --model <supported-model>`; model availability is account-specific, no
+fallback). Review has no pre-implementation approval, so the selected or inherited model is printed when the review starts and
+recorded in the review record (`reviewer.model`, `reviewer.profile`).
 
 Only a `READY_FOR_REVIEW` run can be reviewed. Several candidates require `--run` (ambiguity is an error that lists them). dac
 verifies the evidence (`run.json`, `audit.json`, `diff.patch` hashes), that the SDD documents and task contract are unchanged,
@@ -126,9 +141,13 @@ node <clone>/bin/dac.mjs start                   # custodian, foreground (separa
 node <clone>/bin/dac.mjs sdd plan  --handoff <ID>
 node <clone>/bin/dac.mjs sdd apply --handoff <ID>      # approve on the terminal
 node <clone>/bin/dac.mjs sdd verify --project <project-id>
-node <clone>/bin/dac.mjs implement <task-id>           # review the contract (and the baseline if the repo is unborn), type the phrase
-node <clone>/bin/dac.mjs review <task-id>              # independent read-only review of the audited run
+node <clone>/bin/dac.mjs implement <task-id> --model <supported-model>   # review the contract (and the baseline if the repo is unborn), type the phrase
+node <clone>/bin/dac.mjs review <task-id> --model <supported-model>      # independent read-only review of the audited run
 ```
+
+`<supported-model>` is a model your own Codex account supports (account-specific: pick it yourself; the first pilot attempt failed
+because the second Mac inherited `gpt-5.5` from its Codex configuration, which the ChatGPT account did not support). Omit
+`--model` only if the model inherited from your Codex configuration is supported. dac never substitutes a model.
 
 Worktree-private Git metadata that can hide changes (`info/exclude`, `info/sparse-checkout`, `config.worktree`, hooks,
 `commondir`/`gitdir`, and the shared `info/` and `hooks/`) is fingerprinted when the run starts and re-checked by both the

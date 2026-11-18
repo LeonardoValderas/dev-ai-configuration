@@ -35,12 +35,15 @@ const USAGE = `Usage: dac <command> [options]
   sdd plan   --handoff <ID> [--json]    Print the canonical plan (no writes)   (or --input <file>)
   sdd apply  --handoff <ID> [--json]    Apply after approval on the controlling terminal   (or --input <file>)
   sdd verify --project <ID> [--json]    Re-check artifacts against receipts (no writes)
-  implement <task-id> [--project <ID>] [--preserve-dirty]
+  implement <task-id> [--project <ID>] [--preserve-dirty] [--model <model>]
                                         Implement one persisted SDD task in an automatically created isolated branch/worktree after a
                                         trusted-terminal authorization of the exact task, base, scope and prompt; a blocking audit follows.
                                         Never commits, merges, publishes or cleans up. Dirty projects need --preserve-dirty (changes stay untouched).
-  review <task-id> [--project <ID>] [--run <run-id>]
+                                        --model <model>: passed unchanged to Codex as \`--model <model>\` (part of the authorization). Omitted: the
+                                        model is inherited from your Codex configuration. Availability is account-specific; you choose it, dac never falls back.
+  review <task-id> [--project <ID>] [--run <run-id>] [--model <model>]
                                         Independent read-only review of one audited run, bound to its exact audit/diff hash
+                                        (--model <model>: same meaning, e.g. \`dac review t01 --model <supported-model>\`)
 Project root: init uses --path/the typed path, else the nearest ancestor containing ${STANDARD_PATH}, else the Git top-level;\nother commands use the nearest ancestor of the current directory containing ${STANDARD_PATH}.`;
 
 class Usage extends Error {}
@@ -347,14 +350,14 @@ const taskArg = (cmd, args) => { const [id, ...rest] = args; if (!id || id.start
 
 async function implementCmd(args, cwd, deps) {
   const [taskId, rest] = taskArg('implement', args);
-  const f = parseFlags(rest, { '--project': 'value', '--preserve-dirty': 'bool' });
-  return implementTask({ root: projectRoot(cwd), taskId, flags: { project: f['--project'], preserveDirty: f['--preserve-dirty'] === true }, deps });
+  const f = parseFlags(rest, { '--project': 'value', '--preserve-dirty': 'bool', '--model': 'value' });
+  return implementTask({ root: projectRoot(cwd), taskId, flags: { project: f['--project'], preserveDirty: f['--preserve-dirty'] === true, model: f['--model'] }, deps });
 }
 
 async function reviewCmd(args, cwd, deps) {
   const [taskId, rest] = taskArg('review', args);
-  const f = parseFlags(rest, { '--project': 'value', '--run': 'value' });
-  return reviewTask({ root: projectRoot(cwd), taskId, flags: { project: f['--project'], run: f['--run'] }, deps });
+  const f = parseFlags(rest, { '--project': 'value', '--run': 'value', '--model': 'value' });
+  return reviewTask({ root: projectRoot(cwd), taskId, flags: { project: f['--project'], run: f['--run'], model: f['--model'] }, deps });
 }
 
 export { undoGitInit, gitFingerprint, suggestPackageName }; // exported for tests only

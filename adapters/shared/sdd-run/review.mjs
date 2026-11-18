@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { RunError, metaFingerprint, mainFingerprint, sha256 } from './git.mjs';
 import { loadContext, buildContract, buildReviewPrompt, contractErrors, digestOf } from './context.mjs';
 import { auditWorktree } from './audit.mjs';
-import { assertSafeProfile, codexRunner } from './runners.mjs';
+import { assertSafeProfile, codexRunner, validateModel, modelSelection, modelLabel } from './runners.mjs';
 import { stateRoot, taskDir, assertStateOutside, writeOnce, withLock, listRuns, fileSha } from './store.mjs';
 import { resolveProjectId } from './implement.mjs';
 
@@ -47,7 +47,8 @@ export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
   const runner = deps.reviewRunner ?? codexRunner('review');
   if (runner.role !== 'review') throw new RunError('UNSAFE_PROFILE', 'the review runner must have role "review"; an implementation runner can never review');
   if (runner.id === run.runner.id) throw new RunError('NOT_INDEPENDENT', 'the reviewer must be a different runner/session identity than the implementer');
-  const profile = assertSafeProfile(runner.describe({ network: false }), 'review', false);
+  const model = validateModel(flags.model); // opaque user-selected value; never replaced, normalized or defaulted
+  const profile = assertSafeProfile(runner.describe({ network: false, model }), 'review', false, model);
 
   return withLock(dir, async () => {
     const recheck = () => auditWorktree({ root, run, contract, pre: run.pre, environment: false, claimedFiles: null });
@@ -55,10 +56,10 @@ export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
     if (before.content_hash !== audit.content_hash || before.body.status !== 'PASS') throw new RunError('EVIDENCE', 'the worktree no longer matches the audited content; the review is refused (the worktree and evidence are preserved)');
     const snap = { meta: metaFingerprint(root), main: mainFingerprint(root) };
     const prompt = buildReviewPrompt(ctx, contract, run, audit, diff);
-    log(`dac review: task ${taskId}, run ${sel.run_id}\n  bound to audit hash ${audit.audit_hash}\n  diff sha256 ${audit.diff_sha256} (${audit.totals.files} file(s))\n  reviewer: ${runner.id} (read-only; separate from implementer ${run.runner.id})`);
+    log(`dac review: task ${taskId}, run ${sel.run_id}\n  bound to audit hash ${audit.audit_hash}\n  diff sha256 ${audit.diff_sha256} (${audit.totals.files} file(s))\n  reviewer: ${runner.id} (read-only; separate from implementer ${run.runner.id})\n  model:    ${modelLabel(model)}`);
     const reviewId = `v-${new Date(clock()).toISOString().replace(/[-:T.Z]/g, '').slice(0, 17)}-${random(3)}`;
     let provider = null; let failure = null;
-    try { provider = await runner.run({ cwd: run.worktree.path, prompt, contract, runDir: sel.dir, network: false, profile, diff, audit }); } catch (e) { failure = e; }
+    try { provider = await runner.run({ cwd: run.worktree.path, prompt, contract, runDir: sel.dir, network: false, model, profile, diff, audit }); } catch (e) { failure = e; }
     const result = provider?.result ?? null;
     const errors = result ? contractErrors('result', result) : [failure ? `reviewer failed: ${failure.message}` : 'the reviewer returned no result'];
     if (!errors.length && result.files_changed.length) errors.push('a read-only reviewer reported changed files');
@@ -73,7 +74,7 @@ export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
     const record = {
       kind: 'dac-review', schema: 1, review_id: reviewId, run_id: sel.run_id, task_id: taskId, project_id: pid, verdict,
       audit_hash: audit.audit_hash, content_hash: audit.content_hash, diff_sha256: audit.diff_sha256, result_tree: audit.result_tree, base_commit: run.base_commit,
-      binding_rechecked_after_review: stillBound ? 'equal' : 'CHANGED', reviewer: { id: runner.id, role: 'review', session: `review-${random(8)}`, profile }, implementer: { id: run.runner.id, run_id: sel.run_id },
+      binding_rechecked_after_review: stillBound ? 'equal' : 'CHANGED', reviewer: { id: runner.id, role: 'review', model: modelSelection(model), session: `review-${random(8)}`, profile }, implementer: { id: run.runner.id, run_id: sel.run_id },
       result_errors: errors, result: errors.length ? null : result, reviewed_at: new Date(clock()).toISOString(),
     };
     writeOnce(join(sel.dir, 'reviews', `${reviewId}.json`), record);
