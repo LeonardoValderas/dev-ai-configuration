@@ -9,11 +9,12 @@ import { join } from 'node:path';
 import { canonicalize } from '../sdd-writer/artifacts.mjs';
 import { safeExcerpt } from './runners.mjs';
 import { fileSha, readJson } from './store.mjs';
+import { criterionEvidence } from './criteria-evidence.mjs';
 
 const T = (s, n = 300) => safeExcerpt(s, { causalOnly: false, maxLines: 6, maxLineChars: n, maxBytes: n * 3 });
 const list = (a, n = 20) => (Array.isArray(a) ? a.slice(0, n).map((x) => T(x)) : []);
 
-export function collectEvidence({ run, audit, contract, runDir, reviewerProfile, validation }) {
+export function collectEvidence({ root, run, audit, contract, runDir, reviewerProfile, validation }) {
   const result = readJson(join(runDir, 'result.json'));
   let files = []; try { files = readdirSync(runDir).filter((f) => /^implement-(last-message|transcript)(-\d+)?\.(txt)$/.test(f)).sort(); } catch { /* none */ }
   const implementation = {
@@ -39,7 +40,8 @@ export function collectEvidence({ run, audit, contract, runDir, reviewerProfile,
     unverified: ['Whether the implementer used the network (no observation either way).', 'Whether npm install or other package/download commands ran and left no residue.', 'Whether Git commands that write state ran without changing the fingerprinted locations.', 'Anything the implementer transcript does not contain.'],
     rule: 'Absence of an observation is NOT evidence that an action did not occur, and presence of a declaration is NOT evidence it was enforced. For any criterion about network use, package installation or Git writes, state precisely what the evidence above proves and what remains unverified; mark a criterion violated only on contradicting evidence, and do not change or reinterpret the criteria.',
   };
-  return { implementation, validation: validation ?? { evidence_class: 'independent validation evidence', status: 'NOT PERFORMED' }, declared, observed };
+  const criteria = root ? criterionEvidence({ root, run, audit, contract, validation, profile: reviewerProfile }) : null;
+  return { implementation, validation: validation ?? { evidence_class: 'independent validation evidence', status: 'NOT PERFORMED' }, declared, observed, criteria };
 }
 
 export function renderEvidence(ev) {
@@ -47,11 +49,12 @@ export function renderEvidence(ev) {
   const block = (title, obj) => [`## ${title}`, '```json', JSON.stringify(canonicalize(obj), null, 2), '```', ''];
   return [
     '## Evidence classes (kept separate; do not merge them)',
-    'Four classes follow. Only "independent validation evidence" was produced by dac itself, before this review, from the exact reviewed content. Implementer claims are not independent evidence.',
+    'Four evidence classes and a derived criterion matrix follow. Only "independent validation evidence" was produced by dac itself, before this review, from the exact reviewed content. Implementer claims are not independent evidence.',
     '',
     ...block('1. Implementation evidence (NOT independent)', ev.implementation),
     ...block('2. Independent validation evidence (executed by dac, bound to the audited content)', ev.validation),
     ...block('3. Declared controls/profile (declarations, not proof)', ev.declared),
     ...block('4. Observed actions/audit', ev.observed),
+    ...(ev.criteria ? [...block('5. Criterion -> evidence matrix (derived, read-only; statuses: available / recoverable / not-recorded)', ev.criteria), 'Use the matrix to see which evidence exists for each criterion. Never treat absent, uninspected or not-recorded evidence as a pass; keep such criteria UNVERIFIED and return BLOCKED rather than PASS. Do not change or reinterpret the criteria.', ''] : []),
   ];
 }

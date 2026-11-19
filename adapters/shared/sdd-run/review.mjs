@@ -91,7 +91,7 @@ export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
       log('Evidence and worktree are preserved; nothing was committed, merged, published or cleaned up.');
       return 1;
     }
-    const evidence = collectEvidence({ run, audit, contract, runDir: sel.dir, reviewerProfile: profile, validation: { evidence_class: 'independent validation evidence (executed by dac against the exact audited content)', ...validation.summary } });
+    const evidence = collectEvidence({ root, run, audit, contract, runDir: sel.dir, reviewerProfile: profile, validation: { evidence_class: 'independent validation evidence (executed by dac against the exact audited content)', ...validation.summary } });
     const prompt = buildReviewPrompt(ctx, contract, run, audit, diff, evidence);
     log(`dac review: task ${taskId}, run ${sel.run_id}\n  bound to audit hash ${audit.audit_hash}\n  diff sha256 ${audit.diff_sha256} (${audit.totals.files} file(s))\n  reviewer: ${runner.id} (read-only; separate from implementer ${run.runner.id})\n  model:    ${modelLabel(model)}`);
     let provider = null; let failure = null;
