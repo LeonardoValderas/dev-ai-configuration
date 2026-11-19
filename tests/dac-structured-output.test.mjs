@@ -3,8 +3,9 @@
 // on the same run without touching the immutable evidence. Everything is simulated (injected spawn); no Codex binary is executed.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, rmSync, existsSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { codexRunner, parseResult, deriveProviderResultSchema, assertSafeProfile } from '../adapters/shared/sdd-run/runners.mjs';
 import { contractErrors, buildReviewPrompt } from '../adapters/shared/sdd-run/context.mjs';
 import * as H from './support/run-harness.mjs';
@@ -68,6 +69,73 @@ test('argv contract: implement and review pass --output-schema <file> plus --out
     assert.deepEqual(argv.slice(argv.indexOf('--model'), argv.indexOf('--model') + 2), ['--model', 'm-1']);
     const line = argv.join(' '); assert.ok(argv.includes(role === 'implement' ? 'workspace-write' : 'read-only')); assert.ok(line.includes('mcp_servers={}') && line.includes(`approval_policy="${role === 'implement' ? 'on-request' : 'never'}"`));
     assert.equal(line.includes(`network_access=${network}`), role === 'implement'); assert.ok(!/bypass|yolo|danger|full-auto/i.test(line)); assert.equal(opts.shell, false);
+  }
+});
+
+// Provider compatibility invariant for the constructions present in the result contract: every const/enum node has an explicit type,
+// const is not used, every object lists all its properties as required with additionalProperties false.
+const compatErrors = (node, at = '') => {
+  if (Array.isArray(node)) return node.flatMap((n, i) => compatErrors(n, `${at}/${i}`));
+  if (!node || typeof node !== 'object') return [];
+  const errs = [];
+  if (('const' in node || 'enum' in node) && node.type === undefined) errs.push(`${at}: schema must specify a type`);
+  if ('const' in node) errs.push(`${at}: const is not provider-compatible`);
+  if (node.type === 'object') {
+    const keys = Object.keys(node.properties ?? {});
+    if (JSON.stringify([...(node.required ?? [])].sort()) !== JSON.stringify([...keys].sort())) errs.push(`${at}: required must list every property`);
+    if (node.additionalProperties !== false) errs.push(`${at}: additionalProperties must be false`);
+  }
+  for (const [k, v] of Object.entries(node)) errs.push(...compatErrors(v, `${at}/${k}`));
+  return errs;
+};
+// The previous projection (a reconstructed minimal reproduction, not a captured artifact): refs inlined, optional made required, but const/enum left untyped.
+const priorProjection = () => {
+  const s = JSON.parse(JSON.stringify(deriveProviderResultSchema()));
+  s.properties.kind = { const: 'result' }; delete s.properties.execution_status.type; delete s.properties.validation_result.type;
+  return s;
+};
+
+test('provider schema: const/enum nodes get explicit types and exact canonical values', () => {
+  const s = deriveProviderResultSchema();
+  assert.deepEqual(s.properties.kind, { type: 'string', enum: ['result'] });
+  assert.deepEqual(s.properties.execution_status, { type: 'string', enum: ['COMPLETE', 'PARTIAL', 'BLOCKED'] });
+  assert.deepEqual(s.properties.validation_result, { type: 'string', enum: ['PASS', 'FAIL', 'BLOCKED'] });
+  assert.deepEqual(compatErrors(s), []);
+});
+
+test('provider schema: required fields and nested object/array shapes stay provider-compatible', () => {
+  const s = deriveProviderResultSchema();
+  assert.deepEqual(s.required, ['schema_version', 'kind', 'execution_status', 'validation_result', 'files_changed', 'evidence', 'warnings', 'unresolved_blockers']);
+  for (const k of ['files_changed', 'warnings', 'unresolved_blockers']) assert.deepEqual([s.properties[k].type, s.properties[k].items.type], ['array', 'string']);
+  assert.equal(s.properties.evidence.type, 'array'); assert.equal(s.properties.evidence.items.type, 'object');
+  assert.equal(s.properties.evidence.items.additionalProperties, false);
+  assert.deepEqual(s.properties.evidence.items.properties.description, { type: 'string', minLength: 1 });
+});
+
+test('the prior projection fails the new compatibility invariant (the real Codex error)', () => {
+  const errs = compatErrors(priorProjection());
+  assert.ok(errs.some((e) => e.startsWith('/properties/kind') && /must specify a type/.test(e)), errs.join('\n'));
+  assert.ok(errs.some((e) => e.startsWith('/properties/execution_status')));
+});
+
+test('provider schema derivation fails closed on empty or mixed-type const/enum values (never a type array)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dac-schema-'));
+  try {
+    writeFileSync(join(dir, 'common.schema.json'), '{}');
+    const derive = (props) => { writeFileSync(join(dir, 'result.schema.json'), JSON.stringify({ type: 'object', properties: props })); return deriveProviderResultSchema(dir); };
+    assert.deepEqual(derive({ a: { const: 'x' }, b: { enum: ['x', 'y'] } }).properties, { a: { type: 'string', enum: ['x'] }, b: { type: 'string', enum: ['x', 'y'] } });
+    for (const bad of [{ enum: [] }, { enum: ['x', 1] }, { enum: ['x', null] }]) {
+      assert.throws(() => derive({ a: bad }), (e) => e.code === 'RUNNER' && /single provider type/.test(e.message), JSON.stringify(bad));
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('canonical validation stays authoritative: wrong kind and missing required fields are rejected, nothing repaired', () => {
+  assert.ok(contractErrors('result', { ...okResult([]), kind: 'other' }).length);
+  for (const f of deriveProviderResultSchema().required) {
+    const { [f]: _omit, ...rest } = okResult([]);
+    assert.ok(contractErrors('result', rest).length, `missing ${f} must be rejected`);
+    assert.equal(f in parseResult(JSON.stringify(rest)), false);
   }
 });
 

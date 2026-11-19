@@ -66,6 +66,16 @@ export function deriveProviderResultSchema(schemaDir = join(REPO_ROOT, 'standard
     }
     const out = {};
     for (const [k, v] of Object.entries(node)) if (!['$schema', '$id', '$defs', 'title'].includes(k)) out[k] = walk(v, self);
+    if (out.type === undefined && ('const' in out || Array.isArray(out.enum))) {
+      // Provider strict mode requires an explicit type and rejects const: emit an enum (exact values kept) with a type derived from those values only.
+      const values = 'const' in out ? [out.const] : out.enum;
+      const jsonType = (v) => (v === null ? 'null' : Array.isArray(v) ? 'array' : Number.isInteger(v) ? 'integer' : typeof v);
+      const types = [...new Set(values.map(jsonType))];
+      // Fail closed: empty or mixed-type value sets are never converted, and a type array is never emitted.
+      if (!values.length || types.length !== 1) throw new RunError('RUNNER', 'cannot derive a single provider type for a const/enum schema node');
+      if ('const' in out) { delete out.const; out.enum = values; }
+      out.type = types[0];
+    }
     if (out.type === 'object' && out.properties) out.required = Object.keys(out.properties);
     return out;
   };
