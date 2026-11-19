@@ -8,6 +8,7 @@ import { verify as bootstrapVerify, STANDARD_PATH } from '../../../installer/boo
 import { within, norm } from '../../../installer/lib/sdd.mjs';
 import { verify as writerVerify } from '../sdd-writer/writer.mjs';
 import { artifactPath, readDestination, VALIDATORS, ID_RE, digestOf, canonicalize } from '../sdd-writer/artifacts.mjs';
+import { renderEvidence } from './evidence.mjs';
 import { RunError, sha256, fold, DAC_DIRS, DAC_FILES, MAX_FILE_BYTES, MAX_TOTAL_BYTES, MAX_CHANGED_FILES } from './git.mjs';
 
 export { digestOf };
@@ -144,7 +145,7 @@ export function buildPrompt(ctx, contract) {
   return L.join('\n') + '\n';
 }
 
-export function buildReviewPrompt(ctx, contract, run, audit, diff) {
+export function buildReviewPrompt(ctx, contract, run, audit, diff, evidence) {
   return [
     `# DAC independent review: task ${ctx.task.id} (run ${run.run_id})`,
     '',
@@ -158,6 +159,7 @@ export function buildReviewPrompt(ctx, contract, run, audit, diff) {
     '',
     '## Diff', '```diff', diff.toString('utf8'), '```',
     '',
+    ...renderEvidence(evidence),
     '## Reviewer instructions', readFileSync(join(REPO_ROOT, 'standards/manifests/agents/code-reviewer.md'), 'utf8').trim(),
     '',
     '## Final answer',

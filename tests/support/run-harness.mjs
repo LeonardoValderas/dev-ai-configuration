@@ -110,9 +110,16 @@ export async function impl(root, { taskId = 't-scaffold', runner = implRunner(SC
   const q = quiet();
   try { const code = await implementTask({ root, taskId, flags, deps: { terminal, implementRunner: runner, stateDir: st, log: q.log, ...extra } }); return { code, out: q.out.join('\n'), st, runner, terminal }; } catch (e) { return { error: e, code: e.code, out: q.out.join('\n'), st, runner, terminal }; }
 }
-export async function review(root, st, { taskId = 't-scaffold', runner = reviewRunner(), flags = {} } = {}) {
+// Simulated independent-validation runner: never spawns anything. `outcome(argv, call)` returns a partial runner result.
+export function validationSim(outcome = () => ({}), o = {}) {
+  const r = { id: o.id ?? 'sim-validate', role: o.role ?? 'validate', calls: [],
+    describe: () => ({ id: r.id, role: 'validate', kind: 'simulated', shell: false, bypass: false, ...(o.profile ?? {}) }),
+    async run(args) { r.calls.push(args); const x = await outcome(args.argv, args, r.calls.length); return x === null ? null : { argv: args.argv, status: 0, signal: null, error: null, stdout: `sim stdout: ${args.command}\n`, stderr: '', ...x }; } };
+  return r;
+}
+export async function review(root, st, { taskId = 't-scaffold', runner = reviewRunner(), flags = {}, validator = validationSim() } = {}) {
   const q = quiet();
-  try { const code = await reviewTask({ root, taskId, flags, deps: { reviewRunner: runner, stateDir: st, log: q.log } }); return { code, out: q.out.join('\n'), runner }; } catch (e) { return { error: e, code: e.code, out: q.out.join('\n'), runner }; }
+  try { const code = await reviewTask({ root, taskId, flags, deps: { reviewRunner: runner, validationRunner: validator, stateDir: st, log: q.log } }); return { code, out: q.out.join('\n'), runner, validator }; } catch (e) { return { error: e, code: e.code, out: q.out.join('\n'), runner, validator }; }
 }
 export const runs = (root, st, taskId = 't-scaffold') => listRuns(taskDir(st, root, PID, taskId));
 export const branches = (root) => git(root, 'for-each-ref', '--format=%(refname)', 'refs/heads').trim().split('\n');

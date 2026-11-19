@@ -14,7 +14,7 @@ const MAX_WALK = 200000;
 const MAX_VIOLATIONS = 100;
 const BAD_NAME = /[\u0000-\u001f\u007f�‪-‮⁦-⁩\\]/;
 
-const blobOid = (format, buf) => createHash(format).update(`blob ${buf.length}\0`).update(buf).digest('hex');
+export const blobOid = (format, buf) => createHash(format).update(`blob ${buf.length}\0`).update(buf).digest('hex');
 
 function baseTree(wt, base) {
   const map = new Map();
@@ -41,6 +41,52 @@ function walk(wt, violations) {
     }
   }
   return out;
+}
+
+// Git tree object id of a flat list of { path, mode: '100644'|'100755', oid } computed in pure JS (no Git, no writes), so the
+// SAME tree id the audit obtained through `git write-tree` can be recomputed for any directory copy.
+export function treeOid(format, files) {
+  const build = (items) => {
+    const byName = new Map();
+    for (const f of items) {
+      const i = f.path.indexOf('/');
+      if (i < 0) byName.set(f.path, { mode: f.mode, oid: f.oid });
+      else { const d = f.path.slice(0, i); if (!byName.has(d)) byName.set(d, { dir: [] }); byName.get(d).dir.push({ ...f, path: f.path.slice(i + 1) }); }
+    }
+    const parts = [...byName].map(([name, v]) => {
+      const oid = v.dir ? build(v.dir) : v.oid; const mode = v.dir ? '40000' : v.mode;
+      return { key: Buffer.from(v.dir ? `${name}/` : name, 'utf8'), buf: Buffer.concat([Buffer.from(`${mode} ${name}\0`, 'utf8'), Buffer.from(oid, 'hex')]) };
+    }).sort((a, b) => Buffer.compare(a.key, b.key));
+    const body = Buffer.concat(parts.map((x) => x.buf));
+    return createHash(format).update(`tree ${body.length}\0`).update(body).digest('hex');
+  };
+  return build(files);
+}
+
+// Deterministic manifest of a directory (the root `.git` entry is skipped; nested Git metadata is a problem).
+//   strict=true : only what the audit accepts (regular files, no hardlinks/special modes, safe names); anything else is a problem;
+//                 `tree` is the Git tree id of the content (comparable with audit.result_tree). Empty directories are not content.
+//   strict=false: records every entry (files, symlinks, others; mode/size/sha256) for byproduct reporting; only walk failures are problems.
+// Never follows symlinks. Returns { entries (sorted), tree, problems }.
+export function manifestOf(dir, format, { strict = true } = {}) {
+  const problems = []; const entries = [];
+  const walked = walk(dir, (rule, path, detail) => { if (strict || rule === 'walk-ceiling' || rule === 'unreadable-directory' || rule === 'unreadable-entry') problems.push(`${rule}: ${path}: ${detail}`); });
+  for (const e of walked) {
+    if (e.type === 'dir') { if (!strict) entries.push({ path: e.path, type: 'dir' }); continue; }
+    if (e.type === 'symlink') {
+      if (strict) { problems.push(`symlink: ${e.path}: symlinks are not allowed`); continue; }
+      let target = ''; try { target = readlinkSync(e.abs); } catch { /* unreadable */ }
+      entries.push({ path: e.path, type: 'symlink', mode: (e.st.mode & 0o777).toString(8), size: e.st.size, sha256: sha256(Buffer.from(target)) }); continue;
+    }
+    if (e.type === 'other') { if (strict) problems.push(`special-file: ${e.path}: not a regular file`); else entries.push({ path: e.path, type: 'other', mode: (e.st.mode & 0o7777).toString(8), size: 0, sha256: null }); continue; }
+    if (strict && e.st.nlink > 1) problems.push(`hardlink: ${e.path}: hard-linked file`);
+    if (strict && (e.st.mode & 0o7000)) problems.push(`special-mode: ${e.path}: setuid, setgid or sticky bit`);
+    let buf; try { buf = readFileSync(e.abs); } catch { problems.push(`unreadable-file: ${e.path}`); continue; }
+    entries.push({ path: e.path, type: 'file', mode: strict ? ((e.st.mode & 0o111) ? '100755' : '100644') : (e.st.mode & 0o7777).toString(8), size: buf.length, sha256: sha256(buf), ...(strict ? { oid: blobOid(format, buf) } : {}) });
+  }
+  entries.sort((a, c) => (a.path < c.path ? -1 : a.path > c.path ? 1 : 0));
+  const tree = strict && !problems.length ? treeOid(format, entries.filter((e) => e.type === 'file')) : null;
+  return { entries, tree, problems };
 }
 
 // Returns { body, audit_hash, content_hash, diff, warnings }.

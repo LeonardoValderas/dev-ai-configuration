@@ -105,12 +105,12 @@ const SECRET_RES = [
   [/\b[A-Fa-f0-9]{40,}\b/g, '[REDACTED]'],
 ];
 const CAUSE_LINE = /error|unsupported|not supported|invalid|denied|unauthori[sz]ed|forbidden|fail|exceed|not found|refus|quota|limit|model/i;
-export function safeExcerpt(text, { maxLines = 8, maxLineChars = 240, maxBytes = 1024 } = {}) {
+export function safeExcerpt(text, { maxLines = 8, maxLineChars = 240, maxBytes = 1024, causalOnly = true } = {}) {
   let t = String(text ?? '').replace(/\r\n?/g, '\n');
   for (const [re, to] of SECRET_RES) t = t.replace(re, to);
   t = t.replace(/\u001b\[[0-9;?]*[ -\/]*[@-~]/g, '').replace(/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/gu, '');
   const all = t.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => (l.length > maxLineChars ? `${l.slice(0, maxLineChars)}...` : l));
-  const causal = all.filter((l) => CAUSE_LINE.test(l));
+  const causal = causalOnly ? all.filter((l) => CAUSE_LINE.test(l)) : []; // causalOnly=false: plain bounded tail (validation output)
   let out = (causal.length ? causal.slice(-maxLines) : all.slice(-maxLines)).join('\n');
   if (Buffer.byteLength(out) > maxBytes) out = `${Buffer.from(out).subarray(0, maxBytes).toString('utf8').replace(/�+$/, '')}...`;
   return out;

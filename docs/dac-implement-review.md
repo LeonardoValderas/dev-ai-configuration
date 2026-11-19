@@ -22,8 +22,8 @@ same handoff envelope (`project` is a new optional key next to `constitution` an
   nothing**; `dac implement` has its own gate.
 - No derived Markdown, no `milestone_ref`.
 - Additive schema fields on a task (all optional, so existing records stay valid): `depends_on` (task ids; cycles and unknown
-  ids are rejected), `validation_commands` (single-line strings, shown and bound at authorization; dac itself never runs
-  them), `needs_network` (default false).
+  ids are rejected), `validation_commands` (single-line strings, shown and bound at authorization; `dac implement` never runs
+  them, `dac review` runs exactly this authorized list as independent validation, see §5), `needs_network` (default false).
 
 ## 2. `dac implement <task-id> [--project <id>] [--preserve-dirty] [--model <model>]`
 
@@ -82,7 +82,7 @@ output shows a short, redacted excerpt of Codex's stderr plus the transcript pat
 
 `~/.dac-runs/<project>-<hash>/<sdd-project>/<task>/<run>/` (override: `DAC_RUNS_DIR`; must be outside the project):
 `authorization.json`, `context/`, `worktree/`, `run.json` (pre-run fingerprints), `result.json`, `audit.json`, `diff.patch`,
-`outcome.json`, `reviews/`. Records are written once (exclusive create) and never deleted by dac. Run outcomes:
+`outcome.json`, `reviews/`, `validation/attempt-<n>/` (independent validation, §5). Records are written once (exclusive create) and never deleted by dac. Run outcomes:
 `READY_FOR_REVIEW`, `AUDIT_BLOCKED`, `RUNNER_FAILED`, `NOT_REVIEWABLE`. Remove a run yourself with
 `git worktree remove` and `git branch -D` when you no longer need it.
 
@@ -118,7 +118,8 @@ recorded in the review record (`reviewer.model`, `reviewer.profile`).
 
 Only a `READY_FOR_REVIEW` run can be reviewed. Several candidates require `--run` (ambiguity is an error that lists them). dac
 verifies the evidence (`run.json`, `audit.json`, `diff.patch` hashes), that the SDD documents and task contract are unchanged,
-and re-audits the worktree: its content hash must equal the one recorded. It then launches a **separate** read-only
+and re-audits the worktree: its content hash must equal the one recorded. It then runs the **independent validation** (below)
+and only if that passes launches a **separate** read-only
 `code-reviewer` runner (role `review`, sandbox `read-only`, no network, no MCP, a different identity from the implementer) with
 the exact diff and hashes. The result must satisfy `result.schema.json` with `files_changed: []`. After the review the content,
 the Git metadata and the original project are checked again: if anything moved, the verdict is `INVALIDATED`. The record
@@ -126,6 +127,80 @@ the Git metadata and the original project are checked again: if anything moved, 
 `INVALID_RESULT`, `INVALIDATED`; only `PASS` exits 0. The implementer cannot approve its own work: an implementation runner,
 a runner with the implementer's identity, or an unsafe review profile is refused. Review never cleans up, commits or publishes;
 integrating the branch is your decision.
+
+### Independent validation evidence (no new command; part of `dac review`)
+
+Before the reviewer starts, dac itself executes **exactly** the task's authorized `validation_commands` (the canonical list the
+human approved; for example `npm test` and `npm run build`) through a dedicated, injectable *validation runner* (role
+`validate`, a different identity than the implementer and the reviewer; `assertSafeValidationProfile`). Reviewer output is never
+executed. Commands run as exact argv wrapped by macOS `sandbox-exec` (`shell: false`, hermetic environment without provider keys, `CI=1`, cwd = a
+disposable copy of the audited tree, network and out-of-workspace writes denied, see "Isolation" below); a command that needs shell syntax (quoting, `&&`, pipes, redirects, env assignments, expansion) is refused,
+not interpreted. The command set in `authorization.json` must equal the task contract's; any difference is an unauthorized
+command set.
+
+Binding: the worktree/Git/original-project/evidence state is re-checked **before every command and after all of them**
+(content hash, Git metadata, original project, approval/other-run evidence, and the sha256 of `run.json`, `audit.json`,
+`diff.patch`, `authorization.json`, `outcome.json`). A failed command (non-zero exit, signal, spawn error), any drift,
+missing or inconsistent runner evidence, or an unauthorized command **blocks** the review: the verdict is `BLOCKED`,
+`reviewer_invoked: false`, the reviewer is never launched, and the review record points at the validation record. A task with no
+`validation_commands` runs nothing; the prompt then says that no independent validation evidence exists.
+
+Records: `validation/attempt-<n>/record.json` plus `cmd-<i>.stdout.txt` / `.stderr.txt` (raw, up to 8 MiB per stream, with
+truncation flag and sha256), all exclusive-create under the run directory outside the project; attempts are numbered, so a
+retry adds `attempt-<n+1>` and a new `reviews/<id>.json` and changes nothing else (run, authorization, audit, diff, worktree,
+standard commit, earlier reviews and attempts stay byte-identical). Each record binds `audit_hash`, `content_hash`,
+`result_tree`, `diff_sha256`, `base_commit`, the command and argv, exact cwd, start/finish timestamps, exit code/signal,
+stream hashes and the runner identity/profile.
+
+The reviewer prompt receives a bounded, redacted canonical summary (tail excerpts of at most 20 lines / 2 KiB per stream plus
+hashes and the record path) in four **separately labelled** classes: (1) implementation evidence, *not independent* (the
+implementer's result, claimed evidence, transcript hashes); (2) independent validation evidence (executed by dac); (3) declared
+controls/profile (declarations, not proof of enforcement); (4) observed actions/audit (what the audit inspected and what it
+cannot observe). For constraints such as "no network / no `npm install` / no Git writes" the prompt states what the profile,
+audit and transcripts prove and what stays **unverified**; "not observed" is never presented as "did not occur", and the criteria
+are not changed.
+
+**Disposable validation workspace.** Commands never run in the audited worktree. After the binding check, dac copies the
+audited result tree into `validation/attempt-<n>/workspace/` (regular files and their directories only; modes 0644/0755; no
+`.git`, no symlinks, no hardlinks, no special files, no path escape; every file is re-read without following symlinks and its
+blob id re-verified while copying). Binding: `manifestOf` (shared with the audit, `audit.mjs`) recomputes the Git tree id of the
+source worktree and of the copy in pure JS; both must equal `audit.result_tree` and the two manifests must be identical, else
+the attempt is `BLOCKED` before any command runs (e.g. a source tree with a symlink or a submodule path cannot be copied and
+fails closed). The pre-validation manifest is stored as `pre-manifest.json` (sha256 in the record). `record.json` shows
+`source_worktree`, `validation_cwd` (the workspace) and the binding hashes.
+
+Validation byproducts: after each command dac inventories the workspace (type/mode/sha256, symlinks included, never
+followed) and records what was **generated, modified or deleted** relative to the previous state in `cmd-<i>.outputs.json`,
+plus the cumulative `outputs.json`. These are validation byproducts inside the copy, **not product changes**; they cannot
+affect the audited worktree, `audit.result_tree` or any hash of the run. The reviewer sees counts and a bounded sample, labelled
+as byproducts.
+
+Cleanup: the workspace is removed only after `record.json` and the manifests/outputs were written, and only the attempt's
+own `workspace` directory (never another attempt, never the worktree). `cleanup.json` records `removed` or `retained` with the
+reason; if recording throws before the record exists, or removal fails/is uncertain, the workspace is **retained** and
+reported. Manifests, outputs, stdout/stderr and records are never removed.
+
+**Isolation (preventive controls).** The production validation runner spawns every authorized command as
+`/usr/bin/sandbox-exec -D WORKSPACE=<canonical real workspace path> -p <profile> <original executable> <original args…>` with
+`shell: false`; the logical argv in the evidence stays the authorized argv. The profile is
+`(allow default) (deny network*) (deny file-write*) (allow file-write* (subpath WORKSPACE) (literal /dev/null))`: **all network is
+denied** and **writes are denied everywhere except under the disposable workspace** (not the audited worktree, run evidence,
+repository, HOME or general temp; `/dev/null` is the only extra sink). Reads are not restricted. The runner profile and the
+validation record carry the isolation identity (`macos-sandbox-exec`, profile id and sha256, the profile text).
+The environment is hermetic: only `PATH`, `LANG`, `LC_ALL`, `TERM` are inherited, plus `CI=1`; `HOME`, `TMPDIR` and the npm cache
+are private directories inside the workspace (`.dac-validation/home|tmp|npm-cache`, user/global npm config pointed at nonexistent
+files). Provider/API keys, npm tokens and `NODE_OPTIONS` are not inherited. Those directories are **DAC validation infrastructure**,
+reported separately (`dac_infrastructure`) from command byproducts and never counted as product output.
+**Non-macOS (including Linux) is BLOCKED** until a supported isolator exists, and so is a missing or unusable `sandbox-exec`: dac
+never falls back to a direct spawn.
+
+**Detective controls.** The audit and before/after fingerprints (above) still detect drift of the audited worktree, Git metadata,
+original project and evidence, and block the review; dac does not undo it. Neither control proves that something did **not**
+happen, and neither claims task path/glob prevention: the sandbox is workspace-wide, not per task `paths`. Package installation or
+network use during the *implementation* run remain unverifiable and are reported as such.
+Tests: repository tests use simulated validation and review runners and an injected spawn; `tests/dac-validation-sandbox-macos.test.mjs`
+runs real synthetic commands (not project scripts) under `sandbox-exec` on macOS (inside write allowed, outside write denied,
+loopback network denied against a live listener) and is explicitly **skipped** (never passed) where `sandbox-exec` is unavailable.
 
 ## 6. Second-Mac pilot (DAC commands only; real Codex pending)
 

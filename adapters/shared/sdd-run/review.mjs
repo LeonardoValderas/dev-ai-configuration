@@ -8,7 +8,9 @@ import { RunError, metaFingerprint, mainFingerprint, sha256 } from './git.mjs';
 import { loadContext, buildContract, buildReviewPrompt, contractErrors, digestOf } from './context.mjs';
 import { auditWorktree } from './audit.mjs';
 import { assertSafeProfile, codexRunner, validateModel, modelSelection, modelLabel } from './runners.mjs';
-import { stateRoot, taskDir, assertStateOutside, writeOnce, withLock, listRuns, fileSha } from './store.mjs';
+import { stateRoot, taskDir, assertStateOutside, writeOnce, withLock, listRuns, fileSha, evidenceFingerprint } from './store.mjs';
+import { validationRunner, assertSafeValidationProfile, runIndependentValidation } from './validation.mjs';
+import { collectEvidence } from './evidence.mjs';
 import { resolveProjectId } from './implement.mjs';
 
 export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
@@ -49,15 +51,49 @@ export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
   if (runner.id === run.runner.id) throw new RunError('NOT_INDEPENDENT', 'the reviewer must be a different runner/session identity than the implementer');
   const model = validateModel(flags.model); // opaque user-selected value; never replaced, normalized or defaulted
   const profile = assertSafeProfile(runner.describe({ network: false, model }), 'review', false, model);
+  // dedicated independent-validation runner (injectable): a different identity than the implementer and the reviewer
+  const validator = deps.validationRunner ?? validationRunner();
+  assertSafeValidationProfile(validator, run.runner.id, runner.id);
 
   return withLock(dir, async () => {
     const recheck = () => auditWorktree({ root, run, contract, pre: run.pre, environment: false, claimedFiles: null });
-    const before = recheck();
-    if (before.content_hash !== audit.content_hash || before.body.status !== 'PASS') throw new RunError('EVIDENCE', 'the worktree no longer matches the audited content; the review is refused (the worktree and evidence are preserved)');
-    const snap = { meta: metaFingerprint(root), main: mainFingerprint(root) };
-    const prompt = buildReviewPrompt(ctx, contract, run, audit, diff);
-    log(`dac review: task ${taskId}, run ${sel.run_id}\n  bound to audit hash ${audit.audit_hash}\n  diff sha256 ${audit.diff_sha256} (${audit.totals.files} file(s))\n  reviewer: ${runner.id} (read-only; separate from implementer ${run.runner.id})\n  model:    ${modelLabel(model)}`);
+    const immutable = () => Object.fromEntries(['run.json', 'audit.json', 'diff.patch', 'authorization.json', 'outcome.json'].map((f) => [f, fileSha(join(sel.dir, f))]));
+    const capture = () => { const a = recheck(); return { content: a.content_hash, status: a.body.status, meta: metaFingerprint(root), main: mainFingerprint(root), evidence: evidenceFingerprint(state, root, dir, sel.run_id), files: immutable() }; };
+    const before = capture();
+    if (before.content !== audit.content_hash || before.status !== 'PASS') throw new RunError('EVIDENCE', 'the worktree no longer matches the audited content; the review is refused (the worktree and evidence are preserved)');
+    const snap = { meta: before.meta, main: before.main };
+    const driftOf = () => {
+      const n = capture(); const d = [];
+      if (n.content !== audit.content_hash || n.status !== 'PASS') d.push('audited worktree content changed');
+      if (n.meta !== before.meta) d.push('Git metadata changed');
+      if (n.main !== before.main) d.push('the original project changed');
+      if (n.evidence !== before.evidence) d.push('approval records or evidence of other runs changed');
+      for (const f of Object.keys(before.files)) if (n.files[f] !== before.files[f]) d.push(`${f} changed`);
+      return d;
+    };
     const reviewId = `v-${new Date(clock()).toISOString().replace(/[-:T.Z]/g, '').slice(0, 17)}-${random(3)}`;
+
+    // ---- independent validation: exactly the authorized commands, BEFORE the reviewer; any problem blocks the review ----
+    log(`dac review: independent validation of ${(contract.validation_commands ?? []).length} authorized command(s) by ${validator.id} (separate from implementer and reviewer)`);
+    const validation = await runIndependentValidation({ root, run, contract, audit, runDir: sel.dir, runner: validator, clock, checkBinding: () => { try { return driftOf(); } catch (e) { return [`binding check failed: ${e.message}`]; } } });
+    if (!validation.ok) {
+      const record = {
+        kind: 'dac-review', schema: 1, review_id: reviewId, run_id: sel.run_id, task_id: taskId, project_id: pid, verdict: 'BLOCKED', reviewer_invoked: false,
+        audit_hash: audit.audit_hash, content_hash: audit.content_hash, diff_sha256: audit.diff_sha256, result_tree: audit.result_tree, base_commit: run.base_commit,
+        binding_rechecked_after_review: 'not-run', reviewer: { id: runner.id, role: 'review', model: modelSelection(model), session: null, profile }, implementer: { id: run.runner.id, run_id: sel.run_id },
+        validation: { attempt: validation.attempt, record_file: validation.recordFile, record_sha256: validation.recordSha, overall: 'BLOCKED' },
+        result_errors: validation.reasons.map((x) => `independent validation: ${x}`), result: null, reviewed_at: new Date(clock()).toISOString(),
+      };
+      writeOnce(join(sel.dir, 'reviews', `${reviewId}.json`), record);
+      log(`review ${reviewId}: BLOCKED (independent validation did not pass; the reviewer was NOT invoked)`);
+      for (const x of validation.reasons) log(`  - ${x}`);
+      log(`  full validation record: ${validation.recordFile}`);
+      log('Evidence and worktree are preserved; nothing was committed, merged, published or cleaned up.');
+      return 1;
+    }
+    const evidence = collectEvidence({ run, audit, contract, runDir: sel.dir, reviewerProfile: profile, validation: { evidence_class: 'independent validation evidence (executed by dac against the exact audited content)', ...validation.summary } });
+    const prompt = buildReviewPrompt(ctx, contract, run, audit, diff, evidence);
+    log(`dac review: task ${taskId}, run ${sel.run_id}\n  bound to audit hash ${audit.audit_hash}\n  diff sha256 ${audit.diff_sha256} (${audit.totals.files} file(s))\n  reviewer: ${runner.id} (read-only; separate from implementer ${run.runner.id})\n  model:    ${modelLabel(model)}`);
     let provider = null; let failure = null;
     try { provider = await runner.run({ cwd: run.worktree.path, prompt, contract, runDir: sel.dir, network: false, model, profile, diff, audit }); } catch (e) { failure = e; }
     const result = provider?.result ?? null;
@@ -72,9 +108,10 @@ export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
     else if (errors.length) verdict = 'INVALID_RESULT';
     else verdict = result.execution_status === 'COMPLETE' && result.validation_result === 'PASS' && result.unresolved_blockers.length === 0 ? 'PASS' : result.validation_result === 'BLOCKED' || result.execution_status === 'BLOCKED' ? 'BLOCKED' : 'FAIL';
     const record = {
-      kind: 'dac-review', schema: 1, review_id: reviewId, run_id: sel.run_id, task_id: taskId, project_id: pid, verdict,
+      kind: 'dac-review', schema: 1, review_id: reviewId, run_id: sel.run_id, task_id: taskId, project_id: pid, verdict, reviewer_invoked: true,
       audit_hash: audit.audit_hash, content_hash: audit.content_hash, diff_sha256: audit.diff_sha256, result_tree: audit.result_tree, base_commit: run.base_commit,
       binding_rechecked_after_review: stillBound ? 'equal' : 'CHANGED', reviewer: { id: runner.id, role: 'review', model: modelSelection(model), session: `review-${random(8)}`, profile }, implementer: { id: run.runner.id, run_id: sel.run_id },
+      validation: { attempt: validation.attempt, record_file: validation.recordFile, record_sha256: validation.recordSha, overall: 'PASS' },
       result_errors: errors, result: errors.length ? null : result, reviewed_at: new Date(clock()).toISOString(),
     };
     writeOnce(join(sel.dir, 'reviews', `${reviewId}.json`), record);
