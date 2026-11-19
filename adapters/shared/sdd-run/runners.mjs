@@ -6,8 +6,9 @@
 // for implementation with approval on-request, read-only with approval never for review), no MCP, no network unless the task declared and the human
 // authorized it, and none of the bypass flags.
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { REPO_ROOT } from '../../../installer/lib/run.mjs';
 import { RunError } from './git.mjs';
 
 const BYPASS = /(dangerously-bypass|yolo|danger-full-access|full-auto|bypass)/i;
@@ -44,6 +45,33 @@ export function assertSafeProfile(profile, role, network, model) {
 
 const CODEX_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TERM', 'TMPDIR', 'CODEX_HOME', 'CODEX_API_KEY', 'OPENAI_API_KEY'];
 const cleanEnv = () => Object.fromEntries(CODEX_ENV_KEYS.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
+
+// Provider structured-output schema, DERIVED deterministically from the canonical standards/schemas/result.schema.json (the single
+// semantic contract). Codex --output-schema cannot be assumed to resolve cross-file $ref, so references are inlined; $schema/$id/$defs/title
+// are dropped; and, because provider strict mode requires every object property to be listed as required, optional properties become
+// required (this only narrows what the provider may emit: every conforming output is still canonical-valid). The canonical validation
+// (contractErrors) still runs on the extracted result, and nothing is ever repaired or injected.
+export function deriveProviderResultSchema(schemaDir = join(REPO_ROOT, 'standards', 'schemas')) {
+  const load = (f) => JSON.parse(readFileSync(join(schemaDir, f), 'utf8'));
+  const files = { 'common.schema.json': load('common.schema.json') };
+  const walk = (node, self) => {
+    if (Array.isArray(node)) return node.map((n) => walk(n, self));
+    if (!node || typeof node !== 'object') return node;
+    if (typeof node.$ref === 'string') {
+      const [file, ptr = ''] = node.$ref.split('#');
+      const doc = file ? files[file] : self;
+      const target = doc && ptr.split('/').filter(Boolean).reduce((d, k) => d?.[k], doc);
+      if (!doc || target === undefined) throw new RunError('RUNNER', `cannot resolve schema reference ${node.$ref}`);
+      return walk(target, doc);
+    }
+    const out = {};
+    for (const [k, v] of Object.entries(node)) if (!['$schema', '$id', '$defs', 'title'].includes(k)) out[k] = walk(v, self);
+    if (out.type === 'object' && out.properties) out.required = Object.keys(out.properties);
+    return out;
+  };
+  const canonical = load('result.schema.json');
+  return walk(canonical, canonical);
+}
 
 // Extracts the one JSON object from a provider's last message (tolerates a fenced block).
 export function parseResult(text) {
@@ -94,17 +122,23 @@ export function codexRunner(role, { bin = process.env.DAC_CODEX_BIN || 'codex', 
     id: implement ? 'codex-exec-implement' : 'codex-exec-review', role, provider: 'codex', verified_against_real_binary: false, model: validateModel(model) ?? null, model_source: model === undefined ? 'inherited' : 'explicit',
     sandbox: implement ? 'workspace-write' : 'read-only', approval: implement ? 'on-request' : 'never', mcp: 'none', network: implement ? network === true : false, bypass: false,
     argv: ['exec', ...(model === undefined ? [] : ['--model', model]), '--sandbox', implement ? 'workspace-write' : 'read-only', '--cd', '<worktree>', '-c', `approval_policy="${implement ? 'on-request' : 'never'}"`, '-c', 'mcp_servers={}',
-      ...(implement ? ['-c', `sandbox_workspace_write.network_access=${network === true}`] : []), '--output-last-message', '<result-file>', '-'],
+      ...(implement ? ['-c', `sandbox_workspace_write.network_access=${network === true}`] : []), '--output-schema', '<schema-file>', '--output-last-message', '<result-file>', '-'],
   });
   return {
     id: describe().id, role, describe,
     async run({ cwd, prompt, runDir, network, model }) {
       const profile = describe({ network, model });
-      const resultFile = join(runDir, `${role}-last-message.txt`);
+      // Earlier attempts' files (e.g. a failed review being retried on the same run) are evidence: never overwritten, never reused.
+      let n = 1; const names = () => [`${role}-last-message`, `${role}-output-schema`, `${role}-transcript`].map((b, i) => `${n === 1 ? b : `${b}-${n}`}${i === 1 ? '.json' : '.txt'}`);
+      while (names().some((f) => existsSync(join(runDir, f)))) n += 1;
+      const [resultName, schemaName, transcriptName] = names();
+      const resultFile = join(runDir, resultName);
       writeFileSync(resultFile, '', { flag: 'wx', mode: 0o600 });
-      const argv = profile.argv.map((a) => (a === '<worktree>' ? cwd : a === '<result-file>' ? resultFile : a));
+      const schemaFile = join(runDir, schemaName);
+      writeFileSync(schemaFile, `${JSON.stringify(deriveProviderResultSchema(), null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+      const argv = profile.argv.map((a) => (a === '<worktree>' ? cwd : a === '<result-file>' ? resultFile : a === '<schema-file>' ? schemaFile : a));
       const r = spawn(bin, argv, { cwd, input: prompt, env: cleanEnv(), encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, shell: false });
-      const transcript = join(runDir, `${role}-transcript.txt`);
+      const transcript = join(runDir, transcriptName);
       writeFileSync(transcript, `${r.stdout ?? ''}\n--- stderr ---\n${r.stderr ?? ''}`, { flag: 'wx', mode: 0o600 });
       if (r.error || r.status !== 0) throw new RunError('RUNNER', describeRunnerFailure({ spawnError: r.error, status: r.status, signal: r.signal, stderr: r.stderr, transcript, model }));
       return { result: parseResult(readFileSync(resultFile, 'utf8')) };

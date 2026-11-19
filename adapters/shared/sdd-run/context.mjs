@@ -161,6 +161,6 @@ export function buildReviewPrompt(ctx, contract, run, audit, diff) {
     '## Reviewer instructions', readFileSync(join(REPO_ROOT, 'standards/manifests/agents/code-reviewer.md'), 'utf8').trim(),
     '',
     '## Final answer',
-    'Reply with ONLY one JSON object conforming to the common result contract (files_changed must be []). validation_result PASS means you found no blocking issue and every acceptance criterion is satisfied by the diff; use FAIL for blocking findings and BLOCKED when you cannot decide.',
+    'Reply with ONLY one JSON object conforming to the common result contract: {"schema_version":"1.0","kind":"result","execution_status":"COMPLETE|PARTIAL|BLOCKED","validation_result":"PASS|FAIL|BLOCKED","files_changed":[],"evidence":[{"description":"...","command":"...","output_summary":"..."}],"warnings":[],"unresolved_blockers":[]}. Every one of those fields is required, including schema_version and kind; files_changed must be []. validation_result PASS means you found no blocking issue and every acceptance criterion is satisfied by the diff; use FAIL for blocking findings and BLOCKED when you cannot decide.',
   ].join('\n') + '\n';
 }

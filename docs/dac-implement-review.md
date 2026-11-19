@@ -161,12 +161,25 @@ tests. A test exercises the production entry path and proves injected runners/te
 What the pilot must establish (these are **not** proven by the local tests):
 
 1. Whether the printed Codex runner profile is accepted by the installed Codex version (`sandbox workspace-write`,
-   `approval_policy="on-request"` for implementation (`"never"` for review), `mcp_servers={}`, `network_access`, `--output-last-message`); `dac implement` shows the exact
+   `approval_policy="on-request"` for implementation (`"never"` for review), `mcp_servers={}`, `network_access`, `--output-schema`, `--output-last-message`); `dac implement` shows the exact
    argv. If a flag is rejected the run fails closed with `RUNNER` and evidence is kept; adjust the profile in
    `adapters/shared/sdd-run/runners.mjs` and re-run (a changed profile changes the authorization digest).
 2. That Codex honors the task contract over the installed read-only `AGENTS.md` / `.codex` instructions in the worktree.
 3. That the sandbox really confines writes to the worktree (the audit will report original-project changes either way).
 4. That Codex returns the final JSON result, and that the reviewer runs with the read-only profile.
+5. That Codex accepts the `--output-schema` file. It is derived deterministically from `standards/schemas/result.schema.json`
+   (references inlined; optional evidence properties listed as required, which only narrows what the provider may emit) and is
+   written next to the transcript as `<role>-output-schema.json`. It is a provider hint, not a second contract: the result is
+   still validated against the canonical schema, a missing `schema_version` stays `INVALID_RESULT`, and dac never repairs or
+   injects fields.
+
+Retrying a review after `INVALID_RESULT`: the failed review record and the run evidence are immutable and untouched. Re-run
+`dac review <task-id> --run <run-id> [--model <model>]` with the corrected dac. It re-verifies `run.json`, `audit.json`,
+`diff.patch`, the SDD artifacts (including the installed standard record hash) and the worktree, then writes a *new* review record
+beside the failed one; provider files of the retry get a numeric suffix (`review-last-message-2.txt`, ...). If the installed
+standard record changed since the run (for example `dac update` in the project to adopt the fixed standard commit) the review is
+refused with `DRIFT` by design. Review first, with the corrected dac against the project as it was; the project's recorded
+`standard_commit` is not compared with the dac source commit, so no update is needed. Never edit the evidence to get past it.
 5. That the audit does not produce false positives on a normal scaffold (line-ending filters, formatter output, lockfiles).
 
 Afterwards inspect `~/.dac-runs/…/<run>/` and the branch `dac/<project>/<task>/<run>`; commit/merge it yourself, or delete the
