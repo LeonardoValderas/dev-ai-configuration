@@ -196,7 +196,7 @@ enabled_tools = ["sdd_handoff_submit"]
   project working directory) and the endpoint is the automatic one of section 3.2. The tool schema has no target, runtime, endpoint or apply field
   and rejects unknown fields (tested against the real proxy started with this exact command).
 - `node` runs the installed proxy **directly**: no `sh -c` launcher, no `env_vars` forwarding, no variable expansion, nothing to export. `shell_tool = false`,
-  `sandbox_mode = "read-only"`, `approval_policy = "never"` are unchanged and nothing else is granted. With no custodian running the tool returns `CUSTODIAN_UNAVAILABLE`.
+  `sandbox_mode = "read-only"`, `approval_policy = "never"` are unchanged and nothing else is granted, except one per-tool table `[mcp_servers.dac-sdd-handoff.tools.sdd_handoff_submit]` with `approval_mode = "approve"` (official per-tool Codex key; the only `approval_mode` the canonical verifier accepts; no global approval change, no other tool policy; the tool advertises no MCP annotations). Real Codex acceptance of this table is **UNVERIFIED**, and the minimum Codex version that supports it cannot be proven locally (no Codex binary was run). With no custodian running the tool returns `CUSTODIAN_UNAVAILABLE`.
 - **Upgrading a project installed with the earlier config** (env placeholder / `sh -c` launcher): run `node installer/bootstrap.mjs update --target <P>` from a clean checkout. `update` takes no
   provider or option flags (it keeps the recorded ones), replaces only the managed handoff files, reports `CONFLICT` with zero writes if a managed file was edited locally, and leaves `.sdd/` and every unknown file untouched.
 - **Exactly one tool is exposed** (`enabled_tools`); there is no Write, Edit, shell, approval or apply tool. Codex MCP servers are session-wide rather than per agent, so every
@@ -248,7 +248,7 @@ global Codex config free of other `mcp_servers`/`approval_policy` overrides for 
 
 For each line, write PASS / FAIL / NOT-OBSERVED with the Codex CLI version: (a) project `.codex/config.toml` is loaded and the project is trusted; (b) `dac-sdd-handoff` starts (not `failed`) when
 launched from the project root with no environment setup; (c) the direct `node` command starts with the project root as working directory; (d) `enabled_tools` exposes only
-`sdd_handoff_submit`; (e) with `approval_policy = "never"` and `read-only`, the model is allowed to call that MCP tool (if Codex requires an MCP approval that `never` auto-denies, record it; do **not** relax
+`sdd_handoff_submit`; (e) with `approval_policy = "never"`, `read-only` and the per-tool `approval_mode = "approve"` table, the model is allowed to call that MCP tool and the Codex version in use accepts that key (record the version; do **not** relax
 the policy to make it pass); (f) a submitted envelope appears in the custodian and `plan --handoff` shows it; (g) Codex could not write, run a shell or approve; (h) `apply --handoff` writes only `.sdd/`.
 
 ### 7.4 Evidence status (honest)
@@ -258,5 +258,5 @@ the policy to make it pass); (f) a submitted envelope appears in the custodian a
   proxy from the project root (one tool, unknown fields rejected, inert environment, fail-closed without a custodian), the automatic endpoint across different TMPDIR/HOME/cwd, and migration of earlier installs by `update`, and the end-to-end flow through a real custodian and the Writer with no `sdd-input.json`.
 - **UNVERIFIED until the pilot above:** that real Codex (a) reads project-local `.codex/config.toml` MCP tables with these keys (`command`, `args`, `enabled`, `enabled_tools`; the table shape follows the repository's existing
   `[mcp_servers.context7]` template and the Codex configuration reference listed in [codex-cursor-adapters.md](codex-cursor-adapters.md)), (b) starts the server with the project root as working directory,
-  (c) applies `enabled_tools`, (d) permits an MCP call under `approval_policy = "never"` + `read-only`, and (e) a live model actually calls `sdd_handoff_submit`. The CLI integration/enforcement status in
+  (c) applies `enabled_tools`, (d) accepts the per-tool `approval_mode = "approve"` table (minimum Codex version UNVERIFIED) and permits that one MCP call under `approval_policy = "never"` + `read-only`, and (e) a live model actually calls `sdd_handoff_submit`. The CLI integration/enforcement status in
   `standards/manifests/adapters/codex.json` (`authenticated_enforcement: unverified`) is unchanged.
