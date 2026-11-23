@@ -10,6 +10,7 @@ import { auditWorktree } from './audit.mjs';
 import { assertSafeProfile, codexRunner, validateModel, modelSelection, modelLabel } from './runners.mjs';
 import { stateRoot, taskDir, assertStateOutside, writeOnce, withLock, listRuns, fileSha, evidenceFingerprint } from './store.mjs';
 import { validationRunner, assertSafeValidationProfile, runIndependentValidation } from './validation.mjs';
+import { provisionerRunner, assertSafeProvisionerProfile } from './npm-provision.mjs';
 import { collectEvidence } from './evidence.mjs';
 import { resolveProjectId } from './implement.mjs';
 
@@ -54,6 +55,10 @@ export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
   // dedicated independent-validation runner (injectable): a different identity than the implementer and the reviewer
   const validator = deps.validationRunner ?? validationRunner();
   assertSafeValidationProfile(validator, run.runner.id, runner.id);
+  // npm provisioner (only used for npm projects): its own identity, distinct from implementer, reviewer and validator
+  const provisioner = deps.npmProvisioner ?? provisionerRunner();
+  assertSafeProvisionerProfile(provisioner, run.runner.id, runner.id, validator.id);
+  const npm = { provisioner, probe: deps.npmProbe ?? (() => provisioner.probe()), terminal: deps.terminal, openTerminal: deps.openTerminal, confirmTimeoutMs: deps.confirmTimeoutMs, random, log };
 
   return withLock(dir, async () => {
     const recheck = () => auditWorktree({ root, run, contract, pre: run.pre, environment: false, claimedFiles: null });
@@ -75,7 +80,7 @@ export async function reviewTask({ root, taskId, flags = {}, deps = {} }) {
 
     // ---- independent validation: exactly the authorized commands, BEFORE the reviewer; any problem blocks the review ----
     log(`dac review: independent validation of ${(contract.validation_commands ?? []).length} authorized command(s) by ${validator.id} (separate from implementer and reviewer)`);
-    const validation = await runIndependentValidation({ root, run, contract, audit, runDir: sel.dir, runner: validator, clock, checkBinding: () => { try { return driftOf(); } catch (e) { return [`binding check failed: ${e.message}`]; } } });
+    const validation = await runIndependentValidation({ root, run, contract, audit, runDir: sel.dir, runner: validator, clock, npm, checkBinding: () => { try { return driftOf(); } catch (e) { return [`binding check failed: ${e.message}`]; } } });
     if (!validation.ok) {
       const record = {
         kind: 'dac-review', schema: 1, review_id: reviewId, run_id: sel.run_id, task_id: taskId, project_id: pid, verdict: 'BLOCKED', reviewer_invoked: false,

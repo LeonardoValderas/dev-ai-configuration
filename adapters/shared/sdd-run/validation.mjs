@@ -25,6 +25,7 @@ import { manifestOf, blobOid } from './audit.mjs';
 import { RunError, sha256 } from './git.mjs';
 import { safeExcerpt } from './runners.mjs';
 import { readJson, writeOnce } from './store.mjs';
+import { detectNpm, planNpm, ensureCache, stageCache, readNpmInputs, isNpmCommand, OFFLINE_INSTALL_ARGV, OFFLINE_INSTALL_COMMAND } from './npm-provision.mjs';
 
 export const VALIDATION_MAX_CAPTURE = 8 * 1024 * 1024; // bytes kept per stream in the full record
 const EXCERPT = { maxLines: 20, maxLineChars: 240, maxBytes: 2048, causalOnly: false };
@@ -155,8 +156,45 @@ function splitInfra(d) {
 }
 const INFRA_NOTE = 'DAC validation infrastructure (private HOME/TMPDIR/npm cache), NOT command or product output';
 
+// npm projects (package.json deps / package-lock.json + an authorized npm command): detect strictly, plan the exact identity, and obtain a
+// verified private cache (reuse, or trusted-terminal-approved network provisioning in its own sandbox). See npm-provision.mjs.
+// Returns { applicable:false } | { applicable:true, ok, reasons, plan?, cache? }. Throws never for expected failures.
+async function npmPrepare({ npm, sourceWorktree, format, commands, audit, run, runDir, clock, checkBinding }) {
+  const argvs = commands.map(parseCommand).filter(Boolean);
+  if (!argvs.some(isNpmCommand)) return { applicable: false };
+  const inputs = () => {
+    const m = manifestOf(sourceWorktree, format, { strict: true });
+    if (m.problems.length || m.tree !== audit.result_tree) throw new Error('the audited worktree no longer reproduces audit.result_tree');
+    return readNpmInputs(sourceWorktree, m.entries, blobOid, format);
+  };
+  const build = async () => {
+    const files = inputs(); const d = detectNpm(files, argvs);
+    if (!d.applicable || !d.ok) return d;
+    return planNpm({ files, argvs, audit, run, toolchain: await npm.probe() });
+  };
+  const fail = (r) => ({ applicable: true, ok: false, reasons: r.map((x) => `npm: ${x}`) });
+  let plan; try { plan = await build(); } catch (e) { return fail([`npm inputs could not be inspected: ${safeExcerpt(e.message, { causalOnly: false, maxLines: 2 })}`]); }
+  if (!plan.applicable) return { applicable: false };
+  if (!plan.ok) return fail(plan.reasons);
+  const cache = await ensureCache({ plan, runDir, provisioner: npm.provisioner, clock, random: npm.random, log: npm.log, terminal: npm.terminal, openTerminal: npm.openTerminal, confirmTimeoutMs: npm.confirmTimeoutMs, replan: build, checkBinding });
+  return { applicable: true, ok: cache.ok, reasons: cache.ok ? [] : cache.reasons.map((x) => `npm: ${x}`), plan, cache };
+}
+const npmEvidence = (n) => (!n || !n.applicable ? { applicable: false, note: 'no npm dependencies/lockfile with an authorized npm validation command: current semantics, no provisioning' } : {
+  applicable: true, identity_digest: n.plan?.identity_digest ?? null, identity: n.plan?.identity ?? null, ok: n.ok, reasons: n.ok ? [] : n.reasons,
+  cache: n.cache ? { reused: n.cache.reused, attempt: n.cache.attempt ?? null, cache_hash: n.cache.cacheHash ?? null, manifest_sha256: n.cache.manifestSha ?? null, approval_record_digest: n.cache.approvalRecordDigest ?? null, record_file: n.cache.recordFile ?? null, record_sha256: n.cache.recordSha ?? null } : null,
+  note: 'npm provisioning evidence (network phase only); validation itself runs network-denied',
+});
+
+const npmEvidenceSummary = (n) => ({
+  identity_digest: n.identity_digest, ok: n.ok, cache: n.cache, toolchain: n.identity?.toolchain ?? null, package_json_sha256: n.identity?.package_json_sha256 ?? null, package_lock_sha256: n.identity?.package_lock_sha256 ?? null,
+  install: n.install ? { command: n.install.command, cwd: n.install.cwd, exit_code: n.install.exit_code, signal: n.install.signal, error: n.install.error, binding_before: n.install.binding_before, binding_after: n.install.binding_after, cache_identity: n.install.cache_identity,
+    stdout: n.install.stdout && { bytes_total: n.install.stdout.bytes_total, sha256: n.install.stdout.sha256, tail: n.install.stdout.excerpt }, stderr: n.install.stderr && { bytes_total: n.install.stderr.bytes_total, sha256: n.install.stderr.sha256, tail: n.install.stderr.excerpt }, workspace_outputs: n.install.workspace_outputs ? { file: n.install.workspace_outputs.file, sha256: n.install.workspace_outputs.sha256, counts: n.install.workspace_outputs.counts } : null } : null,
+  reasons: n.reasons, enforcement_note: n.enforcement_note,
+});
+
 // checkBinding() -> string[] of drift reasons ([] = still exactly the audited/authorized state). Never throws on drift.
-export async function runIndependentValidation({ root, run, contract, audit, runDir, runner, clock, checkBinding }) {
+// npm (optional): { provisioner, probe, terminal|openTerminal, confirmTimeoutMs, random, log } enables npm provisioning/offline install.
+export async function runIndependentValidation({ root, run, contract, audit, runDir, runner, clock, checkBinding, npm }) {
   const profile = runner.describe();
   const format = run.object_format ?? 'sha1';
   const reasons = [];
@@ -175,6 +213,7 @@ export async function runIndependentValidation({ root, run, contract, audit, run
   const results = []; let ranAll = true; let workspaceCreated = false; let recorded = false;
   const ws = { kind: 'disposable-copy', path: null, source_worktree: sourceWorktree, git_metadata: 'not copied', pre_manifest_file: null, pre_manifest_sha256: null, tree: null, files: 0, matches_audit_result_tree: false };
   let snapshot = []; const perCommand = []; let finalOutputs = null;
+  let npmState = null; let staged = null; let install = null;
   try {
     // ---- bind a disposable copy to the exact audited result tree (before any command) ----
     if (commands.length && !reasons.length) {
@@ -186,6 +225,7 @@ export async function runIndependentValidation({ root, run, contract, audit, run
         if (reserved) reasons.push(`the audited tree contains the reserved DAC validation root ${INFRA_ROOT} (${reserved}); it must never be confused with DAC validation infrastructure: no copy was made and no command was run`);
         else if (src.problems.length) reasons.push(`the audited worktree cannot be copied safely: ${src.problems.slice(0, 5).join('; ')}`);
         else if (!audit.result_tree || src.tree !== audit.result_tree) reasons.push('the audited worktree content does not reproduce audit.result_tree; no copy was made');
+        else if (npm && (npmState = await npmPrepare({ npm, sourceWorktree, format, commands, audit, run, runDir, clock, checkBinding })).applicable && !npmState.ok) reasons.push(...npmState.reasons);
         else {
           let copyError = null;
           try { workspaceCreated = true; materializeCopy(sourceWorktree, workspace, src.entries, format); } catch (e) { copyError = e; }
@@ -197,14 +237,59 @@ export async function runIndependentValidation({ root, run, contract, audit, run
               const manifest = { kind: 'dac-validation-workspace-manifest', schema: 1, attempt, result_tree: audit.result_tree, content_hash: audit.content_hash, object_format: format, entries: copy.entries };
               const file = join(dir, 'pre-manifest.json');
               ws.pre_manifest_file = file; ws.pre_manifest_sha256 = writeOnce(file, manifest); ws.tree = copy.tree; ws.files = copy.entries.length; ws.path = workspace; ws.matches_audit_result_tree = true;
-              const base = manifestOf(workspace, format, { strict: false });
+              if (npmState?.applicable && npmState.ok) { // verified private cache -> writable private cache inside the disposable workspace (never the audited tree)
+                try { staged = stageCache(npmState.cache.cacheDir, join(workspace, INFRA_DIRS.npm_cache), npmState.cache.cacheHash); } catch (e) { reasons.push(`npm: the verified cache could not be staged into the validation workspace: ${safeExcerpt(e.message, { causalOnly: false, maxLines: 2 })}`); }
+              }
+              const base = reasons.length ? { problems: [], entries: [] } : manifestOf(workspace, format, { strict: false });
               if (base.problems.length) reasons.push(`the validation workspace could not be inventoried: ${base.problems.slice(0, 3).join('; ')}`); else snapshot = base.entries;
             }
           }
         }
       }
     }
-    const initial = snapshot; // inventory of the exact copy before any command
+    const initial = snapshot; // inventory of the exact copy before any command (after the private cache was staged, if any)
+
+    // ---- npm: `npm ci --offline --ignore-scripts` from the verified private cache, inside the same sandbox (network denied) ----
+    if (npmState?.applicable && npmState.ok && ws.path && !reasons.length) {
+      const argv = [...OFFLINE_INSTALL_ARGV];
+      const pre = checkBinding();
+      if (pre.length) reasons.push(`state drift before the offline npm install: ${pre.join('; ')}`);
+      else {
+        const t0 = clock(); let out = null; let thrown = null;
+        try { out = await runner.run({ argv, command: OFFLINE_INSTALL_COMMAND, cwd: workspace }); } catch (e) { thrown = e; }
+        const t1 = clock();
+        const valid = out && typeof out === 'object' && typeof out.stdout === 'string' && typeof out.stderr === 'string' && (Number.isInteger(out.status) || typeof out.signal === 'string' || typeof out.error === 'string') && (out.argv === undefined || sameJson(out.argv, argv));
+        install = { phase: 'offline-install', command: OFFLINE_INSTALL_COMMAND, argv, cwd: workspace, started_at: iso(t0), finished_at: iso(t1), exit_code: null, signal: null, error: null, binding_before: 'equal',
+          cache_identity: { identity_digest: npmState.plan.identity_digest, cache_hash: npmState.cache.cacheHash, staged_cache_hash: staged?.hash ?? null, staged_files: staged?.files ?? null, reused: npmState.cache.reused },
+          install_scripts: 'disabled by --ignore-scripts (configured; no exception). A package that needs scripts fails closed.', network: 'denied by the validation sandbox (configured; see isolation)' };
+        let o = { stdout: '', stderr: '' };
+        if (thrown) { install.error = `runner failed: ${safeExcerpt(thrown.message, { causalOnly: false, maxLines: 3 })}`; reasons.push('the offline npm install could not be run: the validation runner failed'); }
+        else if (!valid) { install.error = 'the validation runner returned missing or inconsistent evidence'; reasons.push('the offline npm install: missing or inconsistent validation evidence'); }
+        else {
+          o = out; install.exit_code = Number.isInteger(out.status) ? out.status : null; install.signal = out.signal ?? null; install.error = out.error ?? null;
+          if (install.exit_code !== 0 || install.signal || install.error) reasons.push(`the offline npm install failed: ${install.error ? 'error' : install.signal ? `signal ${install.signal}` : `exit code ${install.exit_code}`} (the cache may be incomplete or a package may need install scripts, which never run)`);
+        }
+        for (const stream of ['stdout', 'stderr']) {
+          const b = bounded(o[stream]); const file = join(dir, `install.${stream}.txt`); writeOnce(file, b.buf);
+          install[stream] = { file, bytes_total: b.total, bytes_kept: b.buf.length, truncated: b.truncated, sha256: sha256(b.buf), excerpt: safeExcerpt(b.buf.toString('utf8'), EXCERPT) };
+        }
+        const after = manifestOf(workspace, format, { strict: false });
+        if (after.problems.length) reasons.push(`the validation workspace could not be inventoried after the npm install: ${after.problems.slice(0, 3).join('; ')}`);
+        else {
+          const split = splitInfra(diffSnapshots(snapshot, after.entries)); snapshot = after.entries;
+          const hashOf = (p) => after.entries.find((e) => e.path === p)?.sha256 ?? null;
+          install.package_json_sha256_after = hashOf('package.json'); install.package_lock_sha256_after = hashOf('package-lock.json');
+          if (install.package_json_sha256_after !== npmState.plan.identity.package_json_sha256 || install.package_lock_sha256_after !== npmState.plan.identity.package_lock_sha256) reasons.push('the offline npm install changed package.json or package-lock.json in the workspace');
+          if (!reasons.length && !after.entries.some((e) => e.path === 'node_modules/.package-lock.json')) reasons.push('the offline npm install produced no node_modules (no .package-lock.json)');
+          const file = join(dir, 'install.outputs.json');
+          const sha = writeOnce(file, { kind: 'dac-validation-byproducts', schema: 1, attempt, phase: 'offline-install', note: 'node_modules and other install byproducts inside the disposable workspace; NOT product changes and never copied to the audited worktree', ...split.out, dac_infrastructure: { note: INFRA_NOTE, counts: countOf(split.infra) } });
+          install.workspace_outputs = { file, sha256: sha, counts: countOf(split.out), dac_infrastructure_counts: countOf(split.infra) };
+        }
+        if (!reasons.length) { const post = checkBinding(); if (post.length) reasons.push(`state drift after the offline npm install: ${post.join('; ')}`); }
+        install.binding_after = reasons.length ? 'not-verified-equal' : 'equal';
+        if (reasons.length) ranAll = false;
+      }
+    }
 
     for (let i = 0; i < commands.length && !reasons.length; i++) {
       const command = commands[i];
@@ -243,7 +328,7 @@ export async function runIndependentValidation({ root, run, contract, audit, run
     }
     if (!reasons.length) { const post = checkBinding(); if (post.length) reasons.push(`state drift after the validation commands: ${post.join('; ')}`); }
 
-    if (ws.path && perCommand.length) {
+    if (ws.path && (perCommand.length || install)) {
       // cumulative byproducts relative to the exact copy: what is left in the workspace at the end
       const sp = splitInfra(diffSnapshots(initial, snapshot)); const total = sp.out;
       const file = join(dir, 'outputs.json');
@@ -260,6 +345,8 @@ export async function runIndependentValidation({ root, run, contract, audit, run
       runner: { id: runner.id, profile }, authorized_commands: commands, commands_not_run: commands.length - results.length, commands: results,
       binding_after: overall === 'PASS' ? 'equal' : 'not-verified-equal', overall, reasons, complete: ranAll && results.length === commands.length,
       isolation: profile.isolation ?? null,
+      ...(npm ? { npm: { ...npmEvidence(npmState), staged_cache: staged, install, provisioner: npm.provisioner ? { id: npm.provisioner.id, profile: npm.provisioner.describe() } : null,
+        enforcement_note: 'Isolation profiles, --ignore-scripts and the private environment are CONFIGURATION. Only the provisioner preflight (record enforcement field) and the binding/hash checks are observed verification; install-script and network behaviour of npm itself are not independently observed.' } } : {}),
       limits: 'PREVENTIVE (macOS sandbox-exec only): network denied, file writes denied outside the disposable workspace. DETECTIVE: binding/fingerprint checks of the audited worktree, Git metadata, project and evidence. Reads are not restricted; non-macOS is BLOCKED. Neither control proves what a command did not do.',
     };
     const recordFile = join(dir, 'record.json');
@@ -284,6 +371,7 @@ export async function runIndependentValidation({ root, run, contract, audit, run
       workspace: { kind: ws.kind, git_metadata: ws.git_metadata, tree: ws.tree, files: ws.files, matches_audit_result_tree: ws.matches_audit_result_tree, pre_manifest_sha256: ws.pre_manifest_sha256, cleanup: cleanup.status },
       workspace_outputs: finalOutputs ? { note: 'validation byproducts in the disposable copy; NOT product changes', file: finalOutputs.file, sha256: finalOutputs.sha256, counts: finalOutputs.counts, sample: finalOutputs.sample } : null,
       environment: profile.environment ?? null,
+      ...(npmState?.applicable ? { npm: { evidence_class: 'npm provisioning + offline install (executed by dac; node_modules/cache are validation infrastructure, NOT product output)', ...npmEvidenceSummary(record.npm) } } : {}),
       runner: { id: runner.id, profile }, authorized_commands: commands, commands_not_run: record.commands_not_run, reasons, limits: record.limits,
       commands: results.map(({ index, command, cwd, started_at, finished_at, exit_code, signal, error, stdout, stderr }) => ({ index, command, cwd, started_at, finished_at, exit_code, signal, error, stdout: { bytes_total: stdout.bytes_total, truncated: stdout.truncated, sha256: stdout.sha256, tail: stdout.excerpt }, stderr: { bytes_total: stderr.bytes_total, truncated: stderr.truncated, sha256: stderr.sha256, tail: stderr.excerpt } })),
     });
