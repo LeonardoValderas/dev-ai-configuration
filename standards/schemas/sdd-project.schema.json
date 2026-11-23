@@ -90,7 +90,10 @@
           "status": { "enum": ["planned", "in-progress", "done"] },
           "requirements": { "$ref": "common.schema.json#/$defs/idList" },
           "acceptance_criteria": { "$ref": "common.schema.json#/$defs/idList" },
-          "paths": { "$ref": "common.schema.json#/$defs/pathList" }
+          "paths": { "$ref": "common.schema.json#/$defs/pathList" },
+          "depends_on": { "$ref": "common.schema.json#/$defs/idList" },
+          "validation_commands": { "$ref": "common.schema.json#/$defs/textList" },
+          "needs_network": { "type": "boolean" }
         }
       }
     },

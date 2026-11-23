@@ -128,7 +128,16 @@ node <clone>/bin/dac.mjs start                      # foreground custodian (Ctrl
 node <clone>/bin/dac.mjs status [--json]
 node <clone>/bin/dac.mjs sdd plan --handoff <ID>    # then: sdd apply --handoff <ID>; sdd verify --project <ID>
 node <clone>/bin/dac.mjs stop
+node <clone>/bin/dac.mjs implement <task-id>        # implement one persisted SDD task in an isolated worktree (trusted-terminal authorization, blocking audit)
+node <clone>/bin/dac.mjs review <task-id>           # independent read-only review of the audited run (separate session, exact audit/diff hash)
 ```
+
+`dac implement` / `dac review` (Increment B, [docs/dac-implement-review.md](docs/dac-implement-review.md)): the Writer now also
+persists Plan/Tasks as `.sdd/artifacts/<project-id>/project.json` (documentation only; it authorizes nothing). `implement`
+verifies the persisted context, asks on the trusted terminal for an authorization bound to the exact task, base, scope,
+validation commands and prompt, creates the branch/worktree itself, launches Codex only through an explicit safe profile and
+audits everything afterwards (a worktree is not a sandbox). It never commits, merges, publishes or cleans up. **Verified with
+simulated runners only; real Codex behavior is pending the second-Mac pilot** in that document.
 
 Each project records the standard version and the full 40-hex source commit in
 `.dac/standard.json`, and the shared `AGENTS.md` ownership in `.dac/shared.json`. The per-provider

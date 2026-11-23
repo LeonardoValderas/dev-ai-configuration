@@ -11,7 +11,7 @@ import { verifySource } from '../source.mjs';
 import {
   WriterError, ARTIFACT_NAMES, MAX_ARTIFACT_BYTES, ID_RE, RECEIPT_NAME_RE, SDD_ROOT, VALIDATORS,
   artifactPath, receiptPath, consumedPath, assertAllowedPath, readDestination, canonicalBytes, digestOf, canonicalize,
-  renderMarkdown, schemaErrors, isSha,
+  renderMarkdown, schemaErrors, isSha, MARKDOWN_NAMES,
 } from './artifacts.mjs';
 import { TTL_SECONDS, MAX_FUTURE_SKEW_SECONDS, CONFIRM_TIMEOUT_SECONDS, effectiveConfirmTimeoutMs, mintAuthorization, checkAuthorization, confirmationPhrase, openTrustedTerminal, assertTerminal } from './authorization.mjs';
 import { acquireLock, recoverLock } from './lock.mjs';
@@ -47,7 +47,7 @@ function checkInput(input) {
   if (!['create', 'update'].includes(input.operation)) throw new WriterError('INPUT', 'operation must be "create" or "update"');
   if (input.markdown !== undefined && typeof input.markdown !== 'boolean') throw new WriterError('INPUT', 'markdown must be a boolean');
   const names = ARTIFACT_NAMES.filter((n) => input[n] !== undefined);
-  if (!names.length) throw new WriterError('INPUT', 'at least one artifact (constitution, specify) is required');
+  if (!names.length) throw new WriterError('INPUT', 'at least one artifact (constitution, specify, project) is required');
   return names;
 }
 
@@ -64,7 +64,7 @@ function validateContent(input, names) {
     if (r.errors.length) continue;
     if (n === 'specify') Object.assign(traceability, r.summary);
     desired.set(artifactPath(input.project_id, n, 'json'), canonicalBytes(input[n]));
-    if (input.markdown === true) desired.set(artifactPath(input.project_id, n, 'md'), renderMarkdown(n, input[n]));
+    if (input.markdown === true && MARKDOWN_NAMES.includes(n)) desired.set(artifactPath(input.project_id, n, 'md'), renderMarkdown(n, input[n]));
   }
   if (errors.length) throw new WriterError('VALIDATION', `artifact validation failed (${errors.length} error(s))`, { errors });
   return { desired, traceability };
@@ -365,6 +365,7 @@ export function verify({ target, projectId }) {
       if (!latestFor.has(jp)) add('unreceipted', jp, 'artifact has no receipt');
       else if (latestFor.get(jp) !== disk.sha256) add('modified', jp, 'artifact hash differs from the latest receipt');
     }
+    if (!MARKDOWN_NAMES.includes(n)) continue;
     let md;
     try { md = readDestination(root, mp); } catch (e) { add('artifact', mp, e.message); continue; }
     if (md.kind === 'file') {

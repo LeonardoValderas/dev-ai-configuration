@@ -362,6 +362,16 @@ Real unresolved items only (everything in sections 2 to 7 is decided):
   is not a security boundary against a hostile local user.
 - Risk: inherited hard-kill, temp-file and best-effort rollback limits (section 7).
 
+## Increment B: `project.json` (Plan/Tasks)
+
+The writer persists a third artifact, `project` -> `.sdd/artifacts/<project-id>/project.json`, the existing
+`sdd-project.schema.json` record validated by `checkProject()`; the same plan/apply flow, trusted terminal, receipts, hashes,
+locks, drift detection and rollback apply, and the handoff envelope accepts a `project` key. It is documentation only (no
+approvals, changed files, started tasks or completed implementation phases; `NOT-RUN` validation), has no derived Markdown and
+**authorizes nothing**: `dac implement` has its own pre-implementation gate. Its `id` is the SDD project id, unrelated to the
+`package_name` of `.dac/project.json`. Tasks gain optional `depends_on`, `validation_commands` and `needs_network`. Details:
+[dac-implement-review.md](dac-implement-review.md).
+
 ## Input handoff PoC 2 (Claude Code; Codex local pilot, human-started in-memory custodian)
 
 Experimental, Phase 2 PoC. It removes the manual JSON input file for Constitution + Specify without giving any agent

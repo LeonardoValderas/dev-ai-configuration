@@ -64,7 +64,7 @@
     },
     {
       "path": ".claude/dac/contracts/sdd-project.schema.json",
-      "sha256": "101a0ec87da598ea1317195e557b747e7d058f0b8ad4f6b076ff0aed1e4056f4"
+      "sha256": "d5ac121bdcc62c7817ad5e0135e188100e360e3bc34235df2fce83b9643cb3df"
     },
     {
       "path": ".claude/dac/contracts/task-contract.schema.json",

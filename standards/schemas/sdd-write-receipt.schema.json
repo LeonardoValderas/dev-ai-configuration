@@ -58,7 +58,7 @@
       "additionalProperties": false,
       "properties": {
         "status": { "const": "valid" },
-        "artifacts": { "type": "array", "items": { "enum": ["constitution", "specify"] } }
+        "artifacts": { "type": "array", "items": { "enum": ["constitution", "specify", "project"] } }
       }
     },
     "traceability": {

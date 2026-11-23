@@ -62,7 +62,16 @@ export function openTrustedTerminal({ now = Date.now, sleepMs = (ms) => Atomics.
     confirm(text, phrase, { timeoutMs } = {}) {
       if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new WriterError('APPROVAL_TIMEOUT', 'confirmation timed out (no time left)');
       const deadline = now() + timeoutMs;
-      try { writeSync(fd, `${text}\nType exactly "${phrase}" within ${Math.ceil(timeoutMs / 1000)}s to approve, anything else to cancel: `); } catch { return false; }
+      // The whole prompt must reach the human: a non-blocking write can be partial (or EAGAIN) on a long prompt, so keep writing
+      // until every byte is out or the deadline passes. A prompt that cannot be shown in full can never be approved.
+      const prompt = Buffer.from(`${text}\nType exactly "${phrase}" within ${Math.ceil(timeoutMs / 1000)}s to approve, anything else to cancel: `, 'utf8');
+      for (let off = 0; off < prompt.length;) {
+        if (now() >= deadline) throw new WriterError('APPROVAL_TIMEOUT', 'confirmation timed out; nothing was written');
+        try { off += writeSync(fd, prompt, off, prompt.length - off); } catch (e) {
+          if (e.code === 'EAGAIN' || e.code === 'EWOULDBLOCK') { sleepMs(Math.min(5, Math.max(1, deadline - now()))); continue; }
+          return false;
+        }
+      }
       const one = Buffer.alloc(1);
       let line = '';
       while (line.length < 256) {

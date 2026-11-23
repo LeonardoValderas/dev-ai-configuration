@@ -122,7 +122,7 @@ test('[BOOT] update of an existing Codex project (installed without handoff): up
   assert.deepEqual(add.created.sort(), RUNTIME.slice().sort());
   const cfg = read(t, '.codex/config.toml');
   assert.match(cfg, /^\[mcp_servers\.context7\]\nurl = "https:\/\/[^"]+"\nenabled = false$/m, 'context7 stays an inert, disabled template');
-  assert.deepEqual([...cfg.matchAll(/^\[mcp_servers\.([^\]]+)\]$/gm)].map((m) => m[1]).sort(), ['context7', SERVER_NAME]);
+  assert.deepEqual([...cfg.matchAll(/^\[mcp_servers\.([^\].]+)\]$/gm)].map((m) => m[1]).sort(), ['context7', SERVER_NAME]);
   assert.equal(s.api.verify({ target: t }).status, 'OK');
   const off = s.api.apply({ target: t, providers: ['codex'], options: { context7: true } }); assert.equal(off.status, 'APPLIED');
   assert.deepEqual(off.removed.sort(), RUNTIME.slice().sort()); assert.equal(existsSync(join(t, '.dac/runtime')), false, 'emptied runtime dirs are pruned');
@@ -137,7 +137,11 @@ test('[UNIT] native Codex config: exactly one MCP server, direct node launcher (
   assert.equal(verifyPortable('codex', p), true); assert.deepEqual(p, generatePortable('codex', { sddHandoff: true }), 'deterministic');
   const cfg = p.files.get('.codex/config.toml').toString();
   assert.equal(cfg, base.files.get('.codex/config.toml').toString() + '\n' + codexServerToml(), 'the option only appends the one server table');
-  assert.deepEqual([...cfg.matchAll(/^\[mcp_servers\.([^\]]+)\]$/gm)].map((m) => m[1]), [SERVER_NAME]);
+  assert.deepEqual([...cfg.matchAll(/^\[mcp_servers\.([^\].]+)\]$/gm)].map((m) => m[1]), [SERVER_NAME]);
+  // exact per-tool approval table (official Codex key; real Codex acceptance and minimum version UNVERIFIED locally); no other tool policy, no global approval_mode
+  assert.deepEqual([...cfg.matchAll(/^\[mcp_servers\.[^\]]*\.tools\.[^\]]*\]$/gm)].map((m) => m[0]), ['[mcp_servers.dac-sdd-handoff.tools.sdd_handoff_submit]']);
+  assert.ok(cfg.endsWith('[mcp_servers.dac-sdd-handoff.tools.sdd_handoff_submit]\napproval_mode = "approve"\n'));
+  assert.equal((cfg.match(/approval_mode/g) || []).length, 1); assert.equal((base.files.get('.codex/config.toml').toString().match(/approval_mode/g) || []).length, 0, 'default install has no approval_mode');
   const t = serverTable(cfg);
   assert.deepEqual(t, { command: 'node', args: [`${RUNTIME_DIR}/mcp-server.mjs`, '--target', '.'], enabled: true, enabled_tools: [CODEX_TOOL] });
   assert.doesNotMatch(cfg, /\bsh\b|-c\b|env_vars|runtime-dir|DAC_SDD|\$\{?[A-Z_]+/, 'no shell wrapper, no env forwarding, no runtime-dir, no variable expansion');
@@ -147,7 +151,7 @@ test('[UNIT] native Codex config: exactly one MCP server, direct node launcher (
   // read-only defaults of the pre-existing config are unchanged and nothing grants shell/write/apply/approval
   assert.match(cfg, /^sandbox_mode = "read-only"$/m); assert.match(cfg, /^approval_policy = "never"$/m); assert.match(cfg, /^shell_tool = false$/m); assert.match(cfg, /^web_search = "disabled"$/m);
   assert.doesNotMatch(cfg, /danger-full-access|workspace-write|approval_policy = "(on-|untrusted|always)|shell_tool = true|bypass|sandbox_mode = "(?!read-only)/);
-  assert.doesNotMatch(cfg, /^(tools|allowed_tools|approval_mode|auto_approve)\b/m); assert.doesNotMatch(cfg, /apply_patch|approve_all|\bWrite\b|\bEdit\b/);
+  assert.doesNotMatch(cfg, /^(tools|allowed_tools|auto_approve)\b/m); assert.doesNotMatch(cfg.split('\n[mcp_servers.')[0], /approval_mode/, 'no global approval_mode before the server tables'); assert.doesNotMatch(cfg, /apply_patch|approve_all|\bWrite\b|\bEdit\b/);
   // every Codex agent stays read-only; only technical-planner gains the handoff instruction; all others are byte-identical to the default install
   for (const [f, b] of p.files) {
     if (!/^\.codex\/agents\/.+\.toml$/.test(f)) continue;
@@ -173,6 +177,11 @@ test('[UNIT] tampering with the handoff plan is rejected by the canonical verifi
   const cfgOf = (p) => p.files.get('.codex/config.toml').toString();
   const cases = [
     (p) => p.files.set('.codex/config.toml', Buffer.from(cfgOf(p).replace('enabled_tools = ["sdd_handoff_submit"]', 'enabled_tools = ["sdd_handoff_submit", "other"]'))),
+    (p) => p.files.set('.codex/config.toml', Buffer.from(cfgOf(p).replace('\n[mcp_servers.dac-sdd-handoff.tools.sdd_handoff_submit]\napproval_mode = "approve"\n', ''))),
+    (p) => p.files.set('.codex/config.toml', Buffer.from(cfgOf(p).replace('approval_mode = "approve"', 'approval_mode = "auto"'))),
+    (p) => p.files.set('.codex/config.toml', Buffer.from(cfgOf(p) + '\n[mcp_servers.dac-sdd-handoff.tools.other]\napproval_mode = "approve"\n')),
+    (p) => p.files.set('.codex/config.toml', Buffer.from('approval_mode = "approve"\n' + cfgOf(p))),
+    (p) => p.files.set('.codex/config.toml', Buffer.from(cfgOf(p) + 'auto_approve = true\n')),
     (p) => p.files.set('.codex/config.toml', Buffer.from(cfgOf(p) + '\n[mcp_servers.evil]\ncommand = "sh"\n')),
     (p) => p.files.set('.codex/config.toml', Buffer.from(cfgOf(p).replace('sandbox_mode = "read-only"', 'sandbox_mode = "workspace-write"'))),
     (p) => p.files.set(`${RUNTIME_DIR}/extra.mjs`, Buffer.from('x')),
@@ -199,7 +208,7 @@ test('[PROC] the exact generated launcher starts the real proxy from the project
   const m = rpcOn(launch({ DAC_SDD_RUNTIME_DIR: 'relative/dir', TMPDIR: join(scratch, 'elsewhere') }));
   const init = await m.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } }); assert.equal(init.result.serverInfo.name, SERVER_NAME);
   const tl = await m.rpc('tools/list', {}); assert.deepEqual(tl.result.tools.map((x) => x.name), [CODEX_TOOL]);
-  const props = Object.keys(tl.result.tools[0].inputSchema.properties).sort(); assert.deepEqual(props, ['constitution', 'markdown', 'operation', 'project_id', 'specify']);
+  const props = Object.keys(tl.result.tools[0].inputSchema.properties).sort(); assert.deepEqual(props, ['constitution', 'markdown', 'operation', 'project', 'project_id', 'specify']);
   assert.equal(tl.result.tools[0].inputSchema.additionalProperties, false);
   for (const bad of [{ ...envelope(), target: '/etc' }, { ...envelope(), runtime_dir: '/tmp' }, { ...envelope(), apply: true }]) { const r = await m.rpc('tools/call', { name: CODEX_TOOL, arguments: bad }); assert.equal(r.result.isError, true); assert.equal(JSON.parse(r.result.content[0].text).code, 'INPUT'); }
   for (const other of ['sdd_handoff_apply', 'shell', 'write_file']) assert.equal((await m.rpc('tools/call', { name: other, arguments: {} })).error.code, -32602);

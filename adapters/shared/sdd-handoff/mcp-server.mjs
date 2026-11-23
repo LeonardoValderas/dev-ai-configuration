@@ -28,7 +28,7 @@ const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 export const TOOL = Object.freeze({
   name: TOOL_NAME,
-  description: 'Submit an SDD Constitution and/or Specify envelope to the human-started in-memory handoff custodian (validated by the existing writer plan). Returns an opaque handoff_id and the plan digest. Writes nothing; a human must run the writer CLI and approve on the terminal.',
+  description: 'Submit an SDD Constitution, Specify and/or Project (Plan/Tasks) envelope to the human-started in-memory handoff custodian (validated by the existing writer plan). Returns an opaque handoff_id and the plan digest. Writes nothing; a human must run the writer CLI and approve on the terminal.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -39,6 +39,7 @@ export const TOOL = Object.freeze({
       markdown: { type: 'boolean', description: 'Also render derived Markdown.' },
       constitution: { type: 'object', description: 'sdd-constitution artifact.' },
       specify: { type: 'object', description: 'sdd-specify artifact.' },
+      project: { type: 'object', description: 'sdd-project artifact (canonical Plan/Tasks record; documentation only, authorizes nothing).' },
     },
   },
 });

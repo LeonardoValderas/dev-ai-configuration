@@ -52,9 +52,9 @@ const COLLECTIONS = {
 const err = (code, rule, path, message) => ({ code, rule, path, message });
 const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 const dupes = (list) => list.filter((x, i) => list.indexOf(x) !== i);
-const isSafeRel = (p) => typeof p === 'string' && p !== '' && !p.startsWith('/') && !/^[A-Za-z]:|^[~\\]/.test(p) && !p.split(/[\\/]/).includes('..');
-const norm = (p) => p.replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/+$/, '');
-const within = (file, dir) => { const f = norm(file); const d = norm(dir); return f === d || f.startsWith(`${d}/`); };
+export const isSafeRel = (p) => typeof p === 'string' && p !== '' && !p.startsWith('/') && !/^[A-Za-z]:|^[~\\]/.test(p) && !p.split(/[\\/]/).includes('..');
+export const norm = (p) => p.replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/+$/, '');
+export const within = (file, dir) => { const f = norm(file); const d = norm(dir); return f === d || f.startsWith(`${d}/`); };
 const BROAD = /^(\.|\/|\*+|\*\*\/\*|\.\/\*\*?)?$/;
 
 // ---- workflow ---------------------------------------------------------------
@@ -257,6 +257,10 @@ export function checkProject(doc, { workflow, agentMap, projectFile, root }) {
   }
   doc.tasks.forEach((t, i) => {
     const at = (f) => `$.tasks[${i}].${f}`;
+    for (const dep of t.depends_on ?? []) {
+      if (dep === t.id) add('SDD_TRACE', 'dependency-cycle', at('depends_on'), `task "${t.id}" depends on itself`);
+      else if (!taskIds.has(dep)) add('SDD_TRACE', 'broken-ref', at('depends_on'), `task "${dep}" is not defined`);
+    }
     for (const rid of t.requirements) if (!reqs.has(rid)) add('SDD_TRACE', 'broken-ref', at('requirements'), `requirement "${rid}" is not defined`);
     for (const cid of t.acceptance_criteria) {
       const c = crits.get(cid);
@@ -267,6 +271,10 @@ export function checkProject(doc, { workflow, agentMap, projectFile, root }) {
   if (has('task-to-requirement') && (completed.includes('tasks') || started)) {
     for (const r of doc.requirements) if (!doc.tasks.some((t) => t.requirements.includes(r.id))) add('SDD_TRACE', 'requirement-without-task', '$.tasks', `requirement "${r.id}" is not covered by any task`);
   }
+  const deps = new Map(doc.tasks.map((t) => [t.id, (t.depends_on ?? []).filter((d) => taskIds.has(d))]));
+  const state = new Map(); // 1 = visiting, 2 = done
+  const visit = (id) => { if (state.get(id) === 2) return false; if (state.get(id) === 1) return true; state.set(id, 1); const cyc = deps.get(id).some((d) => d !== id && visit(d)); state.set(id, 2); return cyc; };
+  if (doc.tasks.some((t) => visit(t.id))) add('SDD_TRACE', 'dependency-cycle', '$.tasks', 'task dependencies contain a cycle');
   doc.risks.forEach((r, i) => {
     for (const tid of r.tasks) if (!taskIds.has(tid)) add('SDD_TRACE', 'broken-ref', `$.risks[${i}].tasks`, `task "${tid}" is not defined`);
     if (has('risk-to-task') && r.severity === 'high' && r.tasks.length === 0) add('SDD_TRACE', 'risk-without-task', `$.risks[${i}].tasks`, `high risk "${r.id}" is not linked to a task`);

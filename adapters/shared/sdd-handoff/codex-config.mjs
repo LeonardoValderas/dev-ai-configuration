@@ -9,6 +9,9 @@
 //                   target `.`. The endpoint is derived automatically from platform + uid, identical to the custodian's and the Writer's;
 //                   there is no environment variable, no runtime-dir argument and nothing a model/tool argument could alter.
 //  - enabled_tools: exactly ["sdd_handoff_submit"], so even a future second tool in the proxy would not be exposed.
+// - per-tool table `[mcp_servers.dac-sdd-handoff.tools.sdd_handoff_submit]` with `approval_mode = "approve"`: the only approval_mode allowed, scoped to
+//   this one tool (the proxy only submits to the in-memory custodian; human approval stays on the trusted TTY). It is NOT a global approval change.
+//   The tool advertises no MCP annotations (kept truthful). Real Codex acceptance and the minimum Codex version supporting it are UNVERIFIED.
 // `[features] shell_tool = false`, `sandbox_mode = "read-only"` and `approval_policy = "never"` in the same file are unchanged, and no tool
 // other than the single submit tool is granted.
 // Runtime compatibility with a real Codex session is UNVERIFIED (see docs/sdd-input-handoff.md).
@@ -33,6 +36,9 @@ export function codexServerToml() {
     'enabled = true',
     `enabled_tools = [${q(CODEX_TOOL)}]`,
     '',
+    `[mcp_servers.${SERVER_NAME}.tools.${CODEX_TOOL}]`,
+    'approval_mode = "approve"',
+    '',
   ].join('\n');
 }
 
@@ -52,9 +58,12 @@ export function handoffInstructions() {
 // Postcondition on the generated config text: exactly one MCP server table, the fixed launcher, one exposed tool, read-only defaults intact.
 export function assertCodexHandoffConfig(config, { context7 = false } = {}) {
   const bad = (m) => { throw Object.assign(new Error(m), { code: 'PERMISSION_EXCEEDS_CANONICAL' }); };
-  const tables = [...config.matchAll(/^\[mcp_servers\.([^\]\s]+)\]$/gm)].map((m) => m[1]).sort();
+  const tables = [...config.matchAll(/^\[mcp_servers\.([^\].\s]+)\]$/gm)].map((m) => m[1]).sort();
   if (JSON.stringify(tables) !== JSON.stringify(context7 ? ['context7', SERVER_NAME] : [SERVER_NAME])) bad('unexpected MCP server tables');
   if (!config.includes(codexServerToml())) bad('handoff MCP server entry is not the canonical entry');
   if (!/^sandbox_mode = "read-only"$/m.test(config) || !/^approval_policy = "never"$/m.test(config) || !/^shell_tool = false$/m.test(config)) bad('read-only defaults must stay in place');
+  const toolTables = [...config.matchAll(/^\[mcp_servers\.[^\]]*\.tools\.[^\]]*\]\s*$/gm)].map((m) => m[0].trim());
+  if (toolTables.length !== 1 || toolTables[0] !== `[mcp_servers.${SERVER_NAME}.tools.${CODEX_TOOL}]`) bad('only the exact per-tool table for the submit tool is allowed');
+  if ((config.match(/^\s*approval_mode\b/gm) || []).length !== 1 || /^\s*(auto_approve|approve_all)\b/im.test(config)) bad('approval_mode is allowed only once, inside the submit tool table');
   if (/\/(Users|home)\/|^\s*(tools|allowed_tools)\s*=/im.test(config)) bad('config must be portable and must not widen permissions');
 }

@@ -480,7 +480,7 @@ test('15. every preflight failure writes nothing (no .sdd, no lock, no temp file
 
 // ---- 16 -------------------------------------------------------------------------------------------
 test('16. provider-neutral contract: identical for Claude Code, Codex and Cursor; no agent gains write', () => {
-  assert.deepEqual(CONTRACT, { version: 1, operations: ['plan', 'apply', 'verify'], artifacts: ['constitution', 'specify'], storage_root: '.sdd', gate: 'sdd-artifact-write', approval: 'trusted-tty', ttl_seconds: 600, max_future_skew_seconds: 30, markdown_default: false });
+  assert.deepEqual(CONTRACT, { version: 1, operations: ['plan', 'apply', 'verify'], artifacts: ['constitution', 'specify', 'project'], storage_root: '.sdd', gate: 'sdd-artifact-write', approval: 'trusted-tty', ttl_seconds: 600, max_future_skew_seconds: 30, markdown_default: false });
   assert.ok(Object.isFrozen(CONTRACT));
   for (const f of ['writer', 'artifacts', 'authorization', 'lock', 'cli']) assert.doesNotMatch(readFileSync(join(REPO_ROOT, `adapters/shared/sdd-writer/${f}.mjs`), 'utf8'), /claude|codex|cursor/i, f);
   // same inputs => same plan digest no matter which provider drives it
@@ -504,7 +504,7 @@ test('16. provider-neutral contract: identical for Claude Code, Codex and Cursor
 
 test('sdd-project files_changed is never populated by the writer and the shared executor keeps one engine', () => {
   const src = ['writer', 'artifacts', 'authorization', 'lock', 'cli'].map((f) => readFileSync(join(REPO_ROOT, `adapters/shared/sdd-writer/${f}.mjs`), 'utf8')).join('\n');
-  assert.doesNotMatch(src, /sdd-project/);
+  assert.match(src, /documentation-only/); // the persisted project artifact can never claim changed files, approvals or started work
   assert.match(readFileSync(join(REPO_ROOT, 'adapters/shared/sdd-writer/writer.mjs'), 'utf8'), /executeActions\(root, actions/);
   assert.doesNotMatch(src, /\b(renameSync|copyFileSync|rmSync|appendFileSync)\b/); // no private mutation engine
   assert.doesNotMatch(src, /op: 'remove'/);
