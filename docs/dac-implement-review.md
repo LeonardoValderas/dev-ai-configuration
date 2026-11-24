@@ -202,6 +202,81 @@ Tests: repository tests use simulated validation and review runners and an injec
 runs real synthetic commands (not project scripts) under `sandbox-exec` on macOS (inside write allowed, outside write denied,
 loopback network denied against a live listener) and is explicitly **skipped** (never passed) where `sandbox-exec` is unavailable.
 
+### npm provisioning and offline validation (React/Vite-like tasks; part of `dac review`, no new command)
+
+Applies only when the audited result has `package.json` dependencies and/or a `package-lock.json` **and** an authorized
+validation command starts with `npm`. Projects without npm dependencies, or without an npm validation command, keep the
+behaviour described above (no probe, no prompt, no provisioning). Lockfile generation is **never** performed during review:
+`package-lock.json` must already be in the audited result (listed by exact path in the task scope).
+
+Strict detection, fail closed: missing/invalid `package.json` or lock; package/lock dependency mismatch; `lockfileVersion` other than 3;
+local/`file:`/`link:`/git/URL/alias/`workspace:` dependencies or lock entries (`link`, non-`node_modules` paths, non-https, credentialed or
+non-`registry.npmjs.org` `resolved`, missing sha512 `integrity`); `workspaces`; any `.npmrc` or `npm-shrinkwrap.json` in the tree; npm
+validation commands other than `npm test` / `npm run <script>` / `npm run-script <script>` (no options before `--`; never install/ci/
+rebuild/config/exec). A toolchain that cannot be determined also blocks.
+
+1. **Provisioning (the only network phase).** dac asks for a *dedicated* trusted-terminal approval (`/dev/tty`; the canonical Writer
+   `mintAuthorization`/`checkAuthorization`/`effectiveConfirmTimeoutMs`/`confirmationPhrase`/`openTrustedTerminal`, operation `npm-provision`,
+   bound to target/project/prior state/standard commit and the identity digest; lifetime is `issued_at` + exactly 600 s and is **never
+   extended** by a slow confirmation; exact phrase; never `--yes`, stdin, environment, a record or model text; no TTY, timeout or denial
+   blocks). After confirmation, and again immediately before the network phase, the authorization is re-checked with `checkAuthorization`
+   against a freshly recomputed exact plan and the current time: expiry or drift blocks with no download. The approval is bound
+   to one identity digest: `audit_hash`, `result_tree`, `content_hash`, sha256 of `package.json` and `package-lock.json`, Node/npm
+   versions, platform/arch/libc (where available), install policy and flags, the authorized validation commands and the cache identity;
+   the prompt shows them. After confirming, the inputs and the Git/project/evidence binding are re-checked; anything that moved blocks
+   before any download. Then `npm ci --ignore-scripts --no-audit --no-fund` runs in a disposable workspace (exact `package.json` + lock)
+   under a **separate provisioner** (role `provision`, id `dac-npm-provisioner`, distinct from implementer/validator/reviewer) inside macOS
+   `sandbox-exec`: writes are denied except that workspace and its private cache; network is enabled for this phase only (not
+   host-filtered; the lock is limited to `registry.npmjs.org`). HOME, TMPDIR, cache, user/global npm config are private; no npm config,
+   token, provider key, `NODE_OPTIONS`, HOME or user cache is inherited. Before the network phase a preflight *observes* that a write
+   inside is allowed and a write outside is denied (`enforcement.level: verified-by-preflight`; an injected runner without preflight is
+   `configured-only`, i.e. configuration, not verified enforcement).
+2. **Verified cache.** The cache must be a plain file tree (no symlink/hardlink/special file), contain every tarball the lock requires for
+   this platform (optional `os`/`cpu`/`libc` packages for other platforms are accounted for, not assumed), and each tarball's bytes must
+   hash to the lock's sha512 integrity **in the real npm cacache layout**: `npm_config_cache` is the cache directory and npm keeps its data
+   under `<cache>/_cacache/content-v2/sha512/..` and `<cache>/_cacache/index-v5/..` (a cache with `content-v2`/`index-v5` directly under the
+   cache directory is rejected). Each required tarball must also have real index metadata (bucket = sha256 of
+   `make-fetch-happen:request-cache:<resolved url>`, sha1-valid line whose `key` and `integrity` match the lock), which `npm ci --offline`
+   needs to find it. A content manifest (`cache-manifest.json`) and its hash are stored with the approval envelope
+   (`approval.json`: the canonical authorization unchanged + an explicit cache-reuse grant, bound by a digest) and the record (`record.json`) under
+   `<run>/npm-provision/<identity-digest>/attempt-<n>/` (exclusive create, numbered attempts, outside the project; failures, cancellations
+   and drift are recorded too, with stdout/stderr hashes; only the disposable workspace is removed).
+   **Fresh-empty cache (preventive, before any preflight/run/network).** The attempt's `cache/` must not preexist; dac creates it exclusively
+   (non-recursive `mkdir`, mode 0700) and verifies a real non-symlink directory, current-user owner, mode 0700, unredirected path and **empty**,
+   then writes `cache-initial-state.json` (bound to run_id, project_id, audit_hash, identity_digest/plan digest, attempt and the approval record
+   digest; its sha256 is carried by `record.json` and the reviewer summary as `npm.cache.initial_state`). The same directory (dev/ino) must still be
+   empty immediately before the network phase. A preexisting, nonempty, replaced or manipulated cache ends the attempt as `CACHE_NOT_FRESH` with no
+   provisioner call; the record is preserved. This is dac's own observation of the path, not proof about what npm does later. Runs provisioned
+   before this control have no such record: their evidence is reported **UNVERIFIED**, never reconstructed. A **reused** cache is not claimed
+   newly empty: its `initial_state` has `reused: true` and points to the original provisioning attempt's record.
+3. **Reuse.** A later review of the same run with the identical identity reuses the cache **without a new approval and without network** only if
+   an earlier PASS attempt completed under an approval envelope for exactly that identity (canonical authorization shape/600 s TTL/binding valid as of
+   its issuance, canonical reuse grant, envelope digest intact) and the cache re-verifies
+   (manifest re-walk, recorded hashes, lockfile integrity). Directory names and record files are never trusted alone: tampering,
+   missing/extra files, a different identity (e.g. other Node/npm/platform or commands) or a cache planted under another identity's
+   directory blocks and is **never silently re-provisioned**. A changed identity is a new identity and needs a new approval. Two things
+   are deliberately distinct: the **interactive authorization** (600 s from `issued_at`) gates only *starting* a download and is useless
+   after expiry; the **cache-reuse grant** in the envelope (exact `identity_digest`, purpose `offline-validation`, no network, no
+   re-provisioning, valid only while the cache re-verifies against the manifest and lock) authorizes consuming the *completed* download
+   later without a TTY, even after the authorization expired. It never authorizes re-provisioning or network after expiry; an edited
+   envelope or grant is rejected.
+4. **Offline validation.** The verified cache is copied (byte-identity proven) into the private writable cache of the existing disposable
+   validation workspace, then `npm ci --offline --ignore-scripts --no-audit --no-fund` runs there under the existing network-denied
+   sandbox, **before** the already-authorized commands (which are unchanged and still the only commands counted). `record.json` has a
+   separate `npm` block: command/cwd/exit/signal/stdout+stderr hashes (`install.stdout.txt`, `install.stderr.txt`), binding before/after,
+   cache identity and hashes, and `install.outputs.json` for the install byproducts. A failed install, a changed
+   `package.json`/lock in the workspace, a missing `node_modules`, or any drift blocks before the reviewer.
+5. `node_modules`, the cache, `dist`/`coverage`/logs are validation infrastructure/byproducts inside the disposable copy; nothing is copied to
+   the audited worktree, the project or the diff. Install scripts have **no exception**: packages that declare them (listed in the identity)
+   never run them, and a package that needs them makes the offline install fail closed.
+
+Configured vs verified: the sandbox profiles, `--ignore-scripts` and the private environment are configuration; what is *observed* is the
+provisioner preflight, the manifest/integrity verification and the binding/hash checks. Network behaviour and script behaviour of npm itself
+are not independently observed. Non-macOS (including Linux) stays **BLOCKED**: no probe, no provisioning, no direct spawn.
+Tests: `tests/dac-npm-provision.test.mjs` (local deterministic fixtures and injected runners/terminals; no download, no provider) and
+`tests/dac-npm-provision-sandbox-macos.test.mjs` (real `sandbox-exec` with synthetic commands and an offline `npm ci` against an empty cache;
+explicitly skipped, never passed, where unavailable).
+
 ## 6. Second-Mac pilot (DAC commands only; real Codex pending)
 
 Prerequisites: a clean checkout of this repository, Node 20+, Codex installed and logged in by you. Everything below uses
