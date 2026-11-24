@@ -21,7 +21,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, writeSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { assertTerminal, checkAuthorization, confirmationPhrase, mintAuthorization, openTrustedTerminal, effectiveConfirmTimeoutMs, CONFIRM_TIMEOUT_SECONDS } from '../sdd-writer/authorization.mjs';
 import { canonicalize, digestOf } from '../sdd-writer/artifacts.mjs';
 import { RunError, sha256 } from './git.mjs';
@@ -280,6 +280,13 @@ export function verifyAttempt(attemptDir, plan) {
   bad.push(...cacheCoverage(cacheDir, required));
   return bad;
 }
+// Pointer to the cache's initial-state evidence of the ORIGINAL provisioning attempt. Records without it (earlier runs) stay UNVERIFIED: nothing is fabricated.
+function initialStateOf(attemptDir, rec, plan, reused) {
+  const file = join(attemptDir, 'cache-initial-state.json'); const ref = isPlain(rec?.cache_initial_state) ? rec.cache_initial_state : null;
+  const doc = readJson(file); let actual = null; try { actual = sha256(readFileSync(file)); } catch { /* absent */ }
+  const intact = !!ref && !!doc && actual === ref.sha256 && doc.kind === 'dac-npm-cache-initial-state' && doc.identity_digest === plan.identity_digest && doc.attempt === rec.attempt && doc.ok === true;
+  return { reused, original_attempt: rec?.attempt ?? null, file: ref ? file : null, sha256: intact ? actual : null, status: intact ? 'fresh-empty-exclusive-recorded' : 'UNVERIFIED', note: reused ? 'reused cache: NOT claimed newly empty; the evidence belongs to the original provisioning attempt' : null, ...(intact ? { bound: { run_id: doc.run_id, project_id: doc.project_id, audit_hash: doc.audit_hash, identity_digest: doc.identity_digest, approval_record_digest: doc.approval_record_digest, plan_digest: doc.plan_digest }, checks_passed: doc.checks.filter((c) => c.ok).length, checks_total: doc.checks.length, created_at: doc.created_at } : { unverified_reason: 'the original attempt has no intact cache initial-state record (created before this control, or edited)' }) };
+}
 function readFileSyncSafe(p) { try { return readFileSync(p); } catch { return Buffer.alloc(0); } }
 
 // ---------------------------------------------------------------------------------------------------------------- provisioner runner
@@ -348,10 +355,38 @@ export function assertSafeProvisionerProfile(runner, ...otherIds) {
   return p;
 }
 
+// ---------------------------------------------------------------------------------------------------------------- fresh private cache
+// PREVENTIVE control run immediately before any provisioner preflight/run: the cache path must not preexist, is created exclusively (non-recursive
+// mkdir, EEXIST fails) with mode 0700, and must be a real (non-symlink) directory owned by this user, mode 0700, and EMPTY. Re-verified (same
+// dev/ino, still empty) right before the network phase. Ownership/mode checks are skipped only where the platform has no such API (win32).
+export function verifyFreshCache(cacheDir, expect = {}) {
+  const checks = []; const add = (check, ok, detail) => { checks.push({ check, ok: !!ok, ...(detail ? { detail } : {}) }); return !!ok; };
+  let st = null;
+  try { st = lstatSync(cacheDir); } catch (e) { add('exists', false, e.code ?? 'error'); return { ok: false, checks, stat: null }; }
+  add('is_real_directory', st.isDirectory() && !st.isSymbolicLink(), st.isSymbolicLink() ? 'symlink' : st.isDirectory() ? null : 'not a directory');
+  const posix = process.platform !== 'win32' && typeof process.getuid === 'function';
+  add('owned_by_current_user', posix ? st.uid === process.getuid() : true, posix ? null : 'not-applicable on this platform');
+  add('mode_0700', posix ? (st.mode & 0o777) === 0o700 : true, posix ? `mode ${(st.mode & 0o777).toString(8)}` : 'not-applicable on this platform');
+  try { const real = realpathSync(cacheDir); add('path_not_redirected', real === join(realpathSync(dirname(cacheDir)), basename(cacheDir))); } catch { add('path_not_redirected', false, 'unresolvable'); }
+  if (expect.dev !== undefined) add('same_directory_as_created', st.dev === expect.dev && st.ino === expect.ino, 'dev/ino differ from the directory created by dac');
+  let names = null; try { names = readdirSync(cacheDir); } catch { /* reported below */ }
+  add('empty', Array.isArray(names) && names.length === 0, names ? `${names.length} entr${names.length === 1 ? 'y' : 'ies'} present` : 'unreadable');
+  return { ok: checks.every((c) => c.ok), checks, stat: { dev: st.dev, ino: st.ino, mode: st.mode & 0o777, uid: st.uid } };
+}
+export function createFreshCache(cacheDir) {
+  const pre = [];
+  try { const st = lstatSync(cacheDir); pre.push({ check: 'absent_before_create', ok: false, detail: st.isSymbolicLink() ? 'symlink' : st.isDirectory() ? 'directory' : 'other' }); return { ok: false, checks: pre, stat: null }; }
+  catch (e) { if (e.code !== 'ENOENT') { pre.push({ check: 'absent_before_create', ok: false, detail: e.code ?? 'error' }); return { ok: false, checks: pre, stat: null }; } pre.push({ check: 'absent_before_create', ok: true }); }
+  try { mkdirSync(cacheDir, { mode: 0o700 }); pre.push({ check: 'created_exclusively', ok: true }); } catch (e) { pre.push({ check: 'created_exclusively', ok: false, detail: e.code ?? 'error' }); return { ok: false, checks: pre, stat: null }; }
+  try { chmodSync(cacheDir, 0o700); } catch { /* verified below */ }
+  const v = verifyFreshCache(cacheDir);
+  return { ...v, ok: v.ok, checks: [...pre, ...v.checks] };
+}
+
 // ---------------------------------------------------------------------------------------------------------------- ensure cache
 const boundedFile = (path, text) => { const b = Buffer.from(String(text ?? ''), 'utf8'); const kept = b.length > MAX_CAPTURE ? b.subarray(0, MAX_CAPTURE) : b; return { sha256: writeOnce(path, kept), bytes_total: b.length, truncated: b.length > MAX_CAPTURE, file: path }; };
 
-// ensureCache -> { ok, reasons, reused, attempt, attemptDir, cacheDir, record, recordSha, cacheHash, manifestSha, identityDigest, evidence }
+// ensureCache -> { ok, reasons, reused, attempt, attemptDir, cacheDir, record, recordSha, cacheHash, manifestSha, identityDigest, initialState }
 // `replan()` recomputes the plan from the audited worktree (+ toolchain) after the human confirmed; `checkBinding()` -> string[] of drift.
 export async function ensureCache({ plan, runDir, provisioner, clock, random, log = () => {}, terminal, openTerminal, confirmTimeoutMs, replan, checkBinding }) {
   const idDir = join(runDir, 'npm-provision', plan.identity_digest);
@@ -368,7 +403,7 @@ export async function ensureCache({ plan, runDir, provisioner, clock, random, lo
     if (problems.length) return blocked([`cache of provisioning attempt ${n} cannot be reused: ${problems.slice(0, 4).join('; ')}`], { idDir, attempt: n });
     const rec = readJson(join(dir, 'record.json'));
     log(`npm provisioning: reusing the verified private cache of attempt ${n} (identical identity ${plan.identity_digest.slice(0, 12)}, content hash ${rec.cache_hash.slice(0, 12)}); no network, no new approval needed.`);
-    return { ok: true, reasons: [], reused: true, attempt: n, attemptDir: dir, cacheDir: join(dir, 'cache'), record: rec, recordSha: sha256(readFileSync(join(dir, 'record.json'))), cacheHash: rec.cache_hash, manifestSha: rec.manifest_sha256, identityDigest: plan.identity_digest, approvalRecordDigest: rec.approval_record_digest, recordFile: join(dir, 'record.json') };
+    return { ok: true, reasons: [], reused: true, attempt: n, initialState: initialStateOf(dir, rec, plan, true), attemptDir: dir, cacheDir: join(dir, 'cache'), record: rec, recordSha: sha256(readFileSync(join(dir, 'record.json'))), cacheHash: rec.cache_hash, manifestSha: rec.manifest_sha256, identityDigest: plan.identity_digest, approvalRecordDigest: rec.approval_record_digest, recordFile: join(dir, 'record.json') };
   }
 
   // ---- provisioning attempt (numbered, exclusive) ----
@@ -377,10 +412,11 @@ export async function ensureCache({ plan, runDir, provisioner, clock, random, lo
   const workspace = join(dir, 'workspace'); const cacheDir = join(dir, 'cache');
   const home = join(workspace, '.dac-provision', 'home'); const tmp = join(workspace, '.dac-provision', 'tmp');
   const base = { kind: 'dac-npm-provision-record', schema: 1, attempt, identity_digest: plan.identity_digest, identity: plan.identity, runner: { id: provisioner.id, profile: provisioner.describe() } };
+  let initialRef = null; // pointer to cache-initial-state.json (+ pre-network recheck), carried by EVERY later record
   const finish = (status, reasons, extra = {}) => { // exclusive record for EVERY outcome, so evidence is preserved on errors/cancellation
-    const record = { ...base, status, reasons, network_phase: extra.network_phase ?? 'not-started', ...extra };
+    const record = { ...base, status, reasons, network_phase: extra.network_phase ?? 'not-started', ...(initialRef ? { cache_initial_state: initialRef } : {}), ...extra };
     const sha = writeOnce(join(dir, 'record.json'), record);
-    return { ...blocked(reasons, { idDir, attempt }), record, recordSha: sha, recordFile: join(dir, 'record.json'), attemptDir: dir };
+    return { ...blocked(reasons, { idDir, attempt }), record, recordSha: sha, recordFile: join(dir, 'record.json'), attemptDir: dir, initialState: initialRef ? { reused: false, original_attempt: attempt, ...initialRef } : null };
   };
   const cleanup = () => { try { if (existsSync(workspace) && lstatSync(workspace).isDirectory()) rmSync(workspace, { recursive: true, force: true, maxRetries: 2 }); } catch { /* retained; reported by absence of cleanup */ } return existsSync(workspace) ? 'retained' : 'removed'; };
 
@@ -415,14 +451,23 @@ export async function ensureCache({ plan, runDir, provisioner, clock, random, lo
   // disposable workspace: exact package.json + lock only; private HOME/TMPDIR/cache
   let started = null; let run = null; let thrown = null; let enforcement = { level: 'configured-only', note: 'the provisioner exposes no preflight: isolation is CONFIGURATION, not verified enforcement' };
   try {
-    for (const d of [workspace, home, tmp, cacheDir]) mkdirSync(d, { recursive: true, mode: 0o700 });
+    for (const d of [workspace, home, tmp]) mkdirSync(d, { recursive: true, mode: 0o700 });
     writeOnce(join(workspace, 'package.json'), plan.files.pkg); writeOnce(join(workspace, 'package-lock.json'), plan.files.lock);
+    // fresh-empty private cache, verified and RECORDED before any provisioner preflight/run (fail closed; the provisioner is never called on failure)
+    const fresh = createFreshCache(cacheDir);
+    const stateDoc = { kind: 'dac-npm-cache-initial-state', schema: 1, run_id: plan.identity.run_id, project_id: plan.identity.project_id, audit_hash: plan.identity.audit_hash, identity_digest: plan.identity_digest, plan_digest: exactPlanOf(plan).plan_digest, attempt, approval_record_digest: approval.record_digest, cache_path: cacheDir, ok: fresh.ok, created_at: iso(clock()), stat: fresh.stat, checks: fresh.checks, network_phase: 'not-started', note: 'recorded before the provisioner preflight and before any network access' };
+    initialRef = { file: join(dir, 'cache-initial-state.json'), sha256: writeOnce(join(dir, 'cache-initial-state.json'), stateDoc), status: fresh.ok ? 'fresh-empty-exclusive-recorded' : 'FAILED', checks_passed: fresh.checks.filter((c) => c.ok).length, checks_total: fresh.checks.length, bound: { run_id: stateDoc.run_id, project_id: stateDoc.project_id, audit_hash: stateDoc.audit_hash, identity_digest: stateDoc.identity_digest, approval_record_digest: stateDoc.approval_record_digest, plan_digest: stateDoc.plan_digest }, created_at: stateDoc.created_at };
+    if (!fresh.ok) return finish('CACHE_NOT_FRESH', [`the private cache was not freshly and exclusively created empty (${fresh.checks.filter((c) => !c.ok).map((c) => c.check).join(', ')}); nothing was downloaded and the provisioner was not run`], { approval_record_digest: approval.record_digest, cleanup: cleanup() });
     if (typeof provisioner.preflight === 'function') {
       const outsideProbe = join(idDir, `.preflight-outside-${attempt}`);
       const pf = provisioner.preflight({ workspace, cache: cacheDir, outsideProbe });
       enforcement = { level: pf.verified ? 'verified-by-preflight' : 'preflight-FAILED', checks: pf.checks ?? null, note: 'observed by dac before the network phase: write inside workspace/cache succeeds, write outside is denied' };
       if (!pf.verified) { const r = finish('ISOLATION_UNVERIFIED', ['the provisioner isolation preflight failed; nothing was downloaded'], { approval_record_digest: approval.record_digest, enforcement, cleanup: cleanup() }); return r; }
     }
+    // the cache must still be the very directory dac created, still empty (replacement/contamination during preflight => no download)
+    const again2 = verifyFreshCache(cacheDir, { dev: stateDoc.stat.dev, ino: stateDoc.stat.ino });
+    initialRef.recheck_before_network = { ok: again2.ok, checks_passed: again2.checks.filter((c) => c.ok).length, checks_total: again2.checks.length, failed: again2.checks.filter((c) => !c.ok).map((c) => c.check) };
+    if (!again2.ok) return finish('CACHE_NOT_FRESH', [`the private cache changed after it was created (${initialRef.recheck_before_network.failed.join(', ')}); nothing was downloaded`], { approval_record_digest: approval.record_digest, enforcement, cleanup: cleanup() });
     const g2 = expiredOrDrifted(); // immediately before the network phase (after preflight): expiry/drift blocks with no download
     if (g2) return finish(g2.status, g2.reasons, { approval_record_digest: approval.record_digest, enforcement, cleanup: cleanup() });
     started = clock();

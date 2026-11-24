@@ -241,6 +241,14 @@ rebuild/config/exec). A toolchain that cannot be determined also blocks.
    (`approval.json`: the canonical authorization unchanged + an explicit cache-reuse grant, bound by a digest) and the record (`record.json`) under
    `<run>/npm-provision/<identity-digest>/attempt-<n>/` (exclusive create, numbered attempts, outside the project; failures, cancellations
    and drift are recorded too, with stdout/stderr hashes; only the disposable workspace is removed).
+   **Fresh-empty cache (preventive, before any preflight/run/network).** The attempt's `cache/` must not preexist; dac creates it exclusively
+   (non-recursive `mkdir`, mode 0700) and verifies a real non-symlink directory, current-user owner, mode 0700, unredirected path and **empty**,
+   then writes `cache-initial-state.json` (bound to run_id, project_id, audit_hash, identity_digest/plan digest, attempt and the approval record
+   digest; its sha256 is carried by `record.json` and the reviewer summary as `npm.cache.initial_state`). The same directory (dev/ino) must still be
+   empty immediately before the network phase. A preexisting, nonempty, replaced or manipulated cache ends the attempt as `CACHE_NOT_FRESH` with no
+   provisioner call; the record is preserved. This is dac's own observation of the path, not proof about what npm does later. Runs provisioned
+   before this control have no such record: their evidence is reported **UNVERIFIED**, never reconstructed. A **reused** cache is not claimed
+   newly empty: its `initial_state` has `reused: true` and points to the original provisioning attempt's record.
 3. **Reuse.** A later review of the same run with the identical identity reuses the cache **without a new approval and without network** only if
    an earlier PASS attempt completed under an approval envelope for exactly that identity (canonical authorization shape/600 s TTL/binding valid as of
    its issuance, canonical reuse grant, envelope digest intact) and the cache re-verifies

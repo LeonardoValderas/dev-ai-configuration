@@ -181,7 +181,7 @@ async function npmPrepare({ npm, sourceWorktree, format, commands, audit, run, r
 }
 const npmEvidence = (n) => (!n || !n.applicable ? { applicable: false, note: 'no npm dependencies/lockfile with an authorized npm validation command: current semantics, no provisioning' } : {
   applicable: true, identity_digest: n.plan?.identity_digest ?? null, identity: n.plan?.identity ?? null, ok: n.ok, reasons: n.ok ? [] : n.reasons,
-  cache: n.cache ? { reused: n.cache.reused, attempt: n.cache.attempt ?? null, cache_hash: n.cache.cacheHash ?? null, manifest_sha256: n.cache.manifestSha ?? null, approval_record_digest: n.cache.approvalRecordDigest ?? null, record_file: n.cache.recordFile ?? null, record_sha256: n.cache.recordSha ?? null } : null,
+  cache: n.cache ? { reused: n.cache.reused, attempt: n.cache.attempt ?? null, cache_hash: n.cache.cacheHash ?? null, manifest_sha256: n.cache.manifestSha ?? null, approval_record_digest: n.cache.approvalRecordDigest ?? null, record_file: n.cache.recordFile ?? null, record_sha256: n.cache.recordSha ?? null, initial_state: n.cache.initialState ?? null } : null,
   note: 'npm provisioning evidence (network phase only); validation itself runs network-denied',
 });
 

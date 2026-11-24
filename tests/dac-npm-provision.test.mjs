@@ -5,14 +5,14 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as H from './support/run-harness.mjs';
 import { makeProject, persist, projectDoc, task, impl, runs, reviewRunner, validationSim, implRunner, quiet, tty, noTty, write, okResult } from './support/run-harness.mjs';
 import { reviewTask } from '../adapters/shared/sdd-run/review.mjs';
 import { runIndependentValidation } from '../adapters/shared/sdd-run/validation.mjs';
 import { digestOf } from '../adapters/shared/sdd-writer/artifacts.mjs';
-import { exactPlanOf, reuseGrantOf, indexKey, indexPath, CACACHE_DIR, analyzeLock, cacheManifest, cacheCoverage, detectNpm, planNpm, provisionerRunner, assertSafeProvisionerProfile, npmCommandProblem, stageCache, PROVISION_ARGV, OFFLINE_INSTALL_ARGV, OFFLINE_INSTALL_COMMAND, PROVISION_PROFILE } from '../adapters/shared/sdd-run/npm-provision.mjs';
+import { exactPlanOf, reuseGrantOf, indexKey, indexPath, CACACHE_DIR, analyzeLock, cacheManifest, cacheCoverage, detectNpm, planNpm, provisionerRunner, assertSafeProvisionerProfile, npmCommandProblem, stageCache, PROVISION_ARGV, OFFLINE_INSTALL_ARGV, OFFLINE_INSTALL_COMMAND, PROVISION_PROFILE, verifyFreshCache } from '../adapters/shared/sdd-run/npm-provision.mjs';
 
 after(() => { rmSync(H.scratch, { recursive: true, force: true }); });
 
@@ -563,4 +563,92 @@ test('a PASS cache is reusable later without a TTY and without network ONLY for 
   const term = tty(true); const ok = await rv(r2, s2, { prov: p3, toolchain: tc, terminal: term, clock: c2.fn }); assert.equal(ok.code, 0, ok.out); assert.equal(term.calls.length, 1); assert.equal(p3.calls.length, 1);
   const envs = idDirs(run2).map((d) => envOf(join(d, attempts(d).find((n) => existsSync(join(d, n, 'approval.json')))))); assert.equal(new Set(envs.map((e) => e.cache_reuse_grant.identity_digest)).size, 2, 'each grant is limited to its own exact identity');
   assert.ok(envs.every((e) => e.cache_reuse_grant.allows_network === false && e.cache_reuse_grant.allows_reprovisioning === false));
+});
+
+// ---------------------------------------------------------------------------------------------------------- fresh-empty private cache (initial-state evidence)
+const stateOf = (a) => JSON.parse(readFileSync(join(a, 'cache-initial-state.json'), 'utf8'));
+const planting = (plant) => ({ calls: [], confirm() { plant(); return true; } }); // runs while the human "reads": the attempt directory already exists, the cache must not
+const attemptDirNow = (run) => join(idDirs(run)[0], 'attempt-1');
+
+test('new cache: created exclusively, 0700, verified empty and RECORDED before the provisioner runs; bound to run/project/audit/identity/attempt/approval; reviewer receives bounded summary + file hash', async () => {
+  const { root, st, run } = await readyNpm(); const rvr = reviewRunner(); const prov = provSim();
+  let atRun = null; const base = prov.run.bind(prov);
+  prov.run = async (args) => { atRun = existsSync(join(args.cache, '..', 'cache-initial-state.json')) && readdirSync(args.cache).length === 0; return base(args); };
+  const r = await rv(root, st, { runner: rvr, prov, terminal: tty(true) }); assert.equal(r.code, 0, r.out);
+  assert.equal(atRun, true, 'initial-state evidence existed and the cache was still empty when the provisioner started');
+  const a = attemptDirNow(run); const s = stateOf(a); const pr = rec(a); const env = JSON.parse(readFileSync(join(a, 'approval.json'), 'utf8'));
+  assert.equal(s.ok, true); assert.equal(s.network_phase, 'not-started'); assert.equal(s.stat.mode, 0o700); assert.equal(s.stat.uid, process.getuid());
+  for (const c of ['absent_before_create', 'created_exclusively', 'is_real_directory', 'owned_by_current_user', 'mode_0700', 'path_not_redirected', 'empty']) assert.equal(s.checks.find((x) => x.check === c)?.ok, true, c);
+  assert.equal(s.run_id, run.run.run_id); assert.equal(s.project_id, pr.identity.project_id); assert.equal(s.audit_hash, run.audit.audit_hash); assert.equal(s.identity_digest, pr.identity_digest);
+  assert.equal(s.plan_digest, pr.identity_digest); assert.equal(s.attempt, 1); assert.equal(s.approval_record_digest, env.record_digest);
+  assert.equal(pr.cache_initial_state.sha256, H.sha(readFileSync(join(a, 'cache-initial-state.json')))); assert.equal(pr.cache_initial_state.status, 'fresh-empty-exclusive-recorded');
+  assert.equal(pr.cache_initial_state.recheck_before_network.ok, true);
+  const ev = vrec(run).npm.cache.initial_state; assert.equal(ev.reused, false); assert.equal(ev.original_attempt, 1); assert.equal(ev.sha256, pr.cache_initial_state.sha256);
+  assert.ok(rvr.calls[0].prompt.includes(pr.cache_initial_state.sha256) && rvr.calls[0].prompt.includes('fresh-empty-exclusive-recorded'), 'the reviewer prompt carries the file hash and status');
+});
+
+test('preexisting cache path (directory, file or symlink) is rejected before any provisioner call; the failure record and initial-state evidence are preserved', async () => {
+  const plants = { directory: (p) => mkdirSync(p), file: (p) => writeFileSync(p, 'x'), symlink: (p) => symlinkSync('/var/empty', p) };
+  for (const [kind, plant] of Object.entries(plants)) {
+    const { root, st, run } = await readyNpm(); const prov = provSim(); const val = valSim(); const rvr = reviewRunner();
+    const r = await rv(root, st, { runner: rvr, validator: val, prov, terminal: planting(() => plant(join(attemptDirNow(run), 'cache'))) });
+    assert.equal(r.code, 1, kind); assert.equal(prov.calls.length, 0, 'provisioner.run never called'); assert.equal(val.calls.length, 0); assert.equal(rvr.calls.length, 0);
+    const a = attemptDirNow(run); const pr = rec(a); assert.equal(pr.status, 'CACHE_NOT_FRESH', kind); assert.equal(pr.network_phase, 'not-started');
+    const s = stateOf(a); assert.equal(s.ok, false); assert.equal(s.checks.find((c) => c.check === 'absent_before_create').ok, false); assert.equal(pr.cache_initial_state.status, 'FAILED');
+    assert.equal(pr.cache_initial_state.sha256, H.sha(readFileSync(join(a, 'cache-initial-state.json'))));
+    assert.match(r.out, /not freshly and exclusively created/);
+  }
+});
+
+test('preflight hook (isolation check) never runs on a contaminated/preexisting cache', async () => {
+  const { root, st, run } = await readyNpm(); const prov = provSim(); let pf = 0; prov.preflight = () => { pf++; return { verified: true, checks: {} }; };
+  const r = await rv(root, st, { prov, terminal: planting(() => { mkdirSync(join(attemptDirNow(run), 'cache')); writeFileSync(join(attemptDirNow(run), 'cache', 'evil.bin'), 'x'); }) });
+  assert.equal(r.code, 1); assert.equal(pf, 0); assert.equal(prov.calls.length, 0); assert.equal(rec(attemptDirNow(run)).status, 'CACHE_NOT_FRESH');
+});
+
+test('contamination, replacement or mode manipulation during the preflight window is detected before the network phase', async () => {
+  const manip = {
+    'nonempty (file dropped into the fresh cache)': (c) => writeFileSync(join(c, 'planted.tgz'), 'x'),
+    'nonempty (nested directory)': (c) => mkdirSync(join(c, '_cacache', 'content-v2'), { recursive: true }),
+    'replaced by a symlink': (c) => { rmSync(c, { recursive: true, force: true }); symlinkSync('/var/empty', c); },
+    'mode widened': (c) => { chmodSync(c, 0o755); },
+  };
+  for (const [name, act] of Object.entries(manip)) {
+    const { root, st, run } = await readyNpm(); const prov = provSim(); const val = valSim(); const rvr = reviewRunner();
+    prov.preflight = ({ cache }) => { act(cache); return { verified: true, checks: {} }; };
+    const r = await rv(root, st, { runner: rvr, validator: val, prov, terminal: tty(true) });
+    assert.equal(r.code, 1, name); assert.equal(prov.calls.length, 0, `${name}: provisioner.run never called`); assert.equal(val.calls.length, 0); assert.equal(rvr.calls.length, 0);
+    const a = attemptDirNow(run); const pr = rec(a); assert.equal(pr.status, 'CACHE_NOT_FRESH', name); assert.equal(pr.network_phase, 'not-started');
+    assert.equal(pr.cache_initial_state.recheck_before_network.ok, false); assert.ok(pr.cache_initial_state.recheck_before_network.failed.length > 0);
+    assert.equal(stateOf(a).ok, true, 'the initial-state record of the fresh creation is preserved unchanged'); assert.ok(pr.approval_record_digest);
+    assert.equal(lastReview(root, st).verdict, 'BLOCKED');
+  }
+});
+
+test('initial-state evidence survives every post-creation failure outcome (download failure keeps pointer, hash and binding)', async () => {
+  const { root, st, run } = await readyNpm(); const prov = provSim({ outcome: () => ({ status: 1, stderr: 'ENOTFOUND' }) });
+  const r = await rv(root, st, { prov, terminal: tty(true) }); assert.equal(r.code, 1);
+  const a = attemptDirNow(run); const pr = rec(a); assert.equal(pr.status, 'DOWNLOAD_FAILED'); assert.equal(pr.cache_initial_state.status, 'fresh-empty-exclusive-recorded');
+  assert.equal(stateOf(a).identity_digest, pr.identity_digest); assert.equal(pr.cache_initial_state.bound.audit_hash, run.audit.audit_hash);
+  assert.equal(vrec(run).npm.cache.initial_state.sha256, pr.cache_initial_state.sha256);
+});
+
+test('cache reuse is NOT claimed newly empty: evidence distinguishes reuse and points to the original provisioning attempt; legacy attempts stay UNVERIFIED (nothing fabricated)', async () => {
+  const { root, st, run } = await readyNpm(); const prov = provSim();
+  assert.equal((await rv(root, st, { prov, terminal: tty(true) })).code, 0);
+  const a = attemptDirNow(run); const orig = rec(a).cache_initial_state.sha256;
+  assert.equal((await rv(root, st, { prov, openTerminal: throwingTerminal })).code, 0); assert.equal(prov.calls.length, 1);
+  const ev = vrec(run, 2).npm.cache.initial_state; assert.equal(ev.reused, true); assert.equal(ev.original_attempt, 1); assert.equal(ev.sha256, orig); assert.match(ev.note, /NOT claimed newly empty/);
+  assert.equal(existsSync(join(idDirs(run)[0], 'attempt-2')), false, 'no new attempt, hence no new initial-state record');
+  // an earlier run that never recorded initial state: reuse still works, but the evidence is UNVERIFIED
+  rmSync(join(a, 'cache-initial-state.json'));
+  const old = await rv(root, st, { prov, openTerminal: throwingTerminal }); assert.equal(old.code, 0, old.out);
+  const u = vrec(run, 3).npm.cache.initial_state; assert.equal(u.status, 'UNVERIFIED'); assert.equal(u.sha256, null); assert.equal(u.reused, true); assert.ok(u.unverified_reason);
+});
+
+test('verifyFreshCache derives the expected path from its argument: any basename is accepted when fresh, a redirected path is rejected (fail closed)', () => {
+  const base = H.fresh('vfc'); const good = join(base, 'my-npm-store'); mkdirSync(good, { mode: 0o700 }); chmodSync(good, 0o700);
+  const ok = verifyFreshCache(good); assert.equal(ok.checks.find((c) => c.check === 'path_not_redirected')?.ok, true); assert.equal(ok.ok, true);
+  const target = join(base, 'elsewhere'); mkdirSync(target, { mode: 0o700 }); const link = join(base, 'linked-store'); symlinkSync(target, link);
+  const bad = verifyFreshCache(link); assert.equal(bad.checks.find((c) => c.check === 'path_not_redirected')?.ok, false); assert.equal(bad.ok, false);
 });
