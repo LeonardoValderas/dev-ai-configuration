@@ -26,6 +26,30 @@ export function resolveProjectId(root, explicit) {
 
 const targetIdentity = (root) => { const st = statSync(root, { bigint: true }); return { realpath: root, device: st.dev.toString(), inode: st.ino.toString() }; };
 
+// Search of the FULL ancestry of HEAD (no cap; any Git error fails closed) for ONE commit holding ALL approved files of a reviewed run (never split across commits).
+// Non-deleted: blob sha256 equals the audited sha256. Deleted: absent in the commit AND present with the reviewed base blob in its
+// first parent, i.e. the commit itself represents the reviewed deletion (a root commit or a mere absence never qualifies).
+export function historicalCommitIntegrates(root, head, changes) {
+  if (!changes.length) return false;
+  const log = git(root, ['rev-list', head], { allowFail: true });
+  if (log === null) return false;
+  const shaCache = new Map(); // blob oid -> sha256 of its bytes
+  const oidAt = (rev, path) => git(root, ['rev-parse', '--verify', '-q', `${rev}:${path}`], { allowFail: true })?.trim() || null;
+  const blobSha = (oid) => {
+    if (!shaCache.has(oid)) { const b = git(root, ['cat-file', 'blob', oid], { buffer: true, allowFail: true }); shaCache.set(oid, b === null ? null : sha256(b)); }
+    return shaCache.get(oid);
+  };
+  const oneOk = (commit, c) => {
+    const oid = oidAt(commit, c.path);
+    if (c.status === 'deleted') return oid === null && typeof c.base_oid === 'string' && c.base_oid !== '' && oidAt(`${commit}^1`, c.path) === c.base_oid;
+    return oid !== null && typeof c.sha256 === 'string' && blobSha(oid) === c.sha256;
+  };
+  for (const commit of log.split('\n').filter((l) => /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(l))) {
+    if (changes.every((c) => oneOk(commit, c))) return true;
+  }
+  return false;
+}
+
 // A dependency is satisfied only by a run of that task that passed audit AND an independent review (PASS), AND whose exact
 // reviewed content is present in the project's current HEAD (the human integrated it). Content-based: any merge style works.
 function dependencyState(root, head, dir, depId, pid) {
@@ -36,11 +60,12 @@ function dependencyState(root, head, dir, depId, pid) {
   for (const r of [...runs].reverse()) {
     const rev = [...r.reviews].reverse().find((x) => x.verdict === 'PASS' && x.audit_hash === r.audit?.audit_hash);
     if (!rev) { lastReason = `run ${r.run_id} has no passing independent review`; continue; }
-    const missing = (r.audit.changes ?? []).filter((c) => {
+    const changes = r.audit.changes ?? [];
+    const missing = changes.filter((c) => {
       const buf = git(root, ['cat-file', 'blob', `${head}:${c.path}`], { buffer: true, allowFail: true });
       return c.status === 'deleted' ? buf !== null : buf === null || sha256(buf) !== c.sha256;
     });
-    if (missing.length) { lastReason = `run ${r.run_id} is reviewed but not integrated in HEAD (${missing.length} file(s) differ, e.g. ${missing[0].path}); merge or commit it yourself first`; continue; }
+    if (missing.length && !historicalCommitIntegrates(root, head, changes)) { lastReason = `run ${r.run_id} is reviewed but not integrated in HEAD or any single ancestor commit (${missing.length} file(s) differ in HEAD, e.g. ${missing[0].path}); merge or commit it yourself first`; continue; }
     return { task_id: depId, ok: true, run_id: r.run_id, review_id: rev.review_id };
   }
   return { task_id: depId, ok: false, reason: lastReason };
