@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { plan as writerPlan, apply as writerApply, verify as writerVerify } from '../adapters/shared/sdd-writer/writer.mjs';
 import { TOOL } from '../adapters/shared/sdd-handoff/mcp-server.mjs';
-import { implementTask } from '../adapters/shared/sdd-run/implement.mjs';
+import { implementTask, historicalCommitIntegrates } from '../adapters/shared/sdd-run/implement.mjs';
 import * as H from './support/run-harness.mjs';
 import { PID, git, tty, noTty, implRunner, write, quiet, snapshot, makeProject, persist, projectDoc, task, dac, impl, review, runs, branches, worktreeCount, stateEntries, state, SCAFFOLD, ok, BASE_FILES } from './support/run-harness.mjs';
 
@@ -226,6 +226,65 @@ test('implement: a dependent task waits for a reviewed (PASS) AND integrated dep
   write(root, 'package.json', readFileSync(join(r.run.worktree.path, 'package.json'), 'utf8')); write(root, 'src/index.js', readFileSync(join(r.run.worktree.path, 'src/index.js'), 'utf8'));
   git(root, 'add', 'package.json', 'src/index.js'); git(root, 'commit', '-q', '-m', 'integrate t-scaffold');
   const done = await feat(); assert.equal(done.code, 0, done.out); assert.match(done.terminal.calls[0].text, /dependencies: t-scaffold \(run r-/);
+});
+
+test('implement: dependency integrated at ONE ancestor commit stays met after later commits change those files; split, non-ancestor and mismatching histories fail', async () => {
+  const root = makeProject({ files: BASE_FILES }); const st = state();
+  const feat = () => impl(root, { taskId: 't-feature', st, runner: implRunner((cwd) => write(cwd, 'src/feature.js', 'export const f = 1;\n'), H.okResult(['src/feature.js'])) });
+  assert.equal((await impl(root, { st })).code, 0);
+  assert.equal((await review(root, st)).code, 0);
+  const [r] = runs(root, st); const wt = (f) => readFileSync(join(r.run.worktree.path, f), 'utf8');
+  const main = git(root, 'rev-parse', '--abbrev-ref', 'HEAD').trim();
+  // split across two ancestor commits, both files later changed: HEAD matches nothing, no single commit has all
+  write(root, 'package.json', wt('package.json')); git(root, 'add', 'package.json'); git(root, 'commit', '-q', '-m', 'pkg');
+  write(root, 'src/index.js', wt('src/index.js')); git(root, 'add', 'src/index.js'); git(root, 'commit', '-q', '-m', 'idx');
+  const both = git(root, 'rev-parse', 'HEAD').trim(); // this single commit holds ALL approved files
+  git(root, 'checkout', '-q', '-b', 'side'); write(root, 'src/index.js', 'changed on side\n'); git(root, 'commit', '-q', '-am', 'side'); git(root, 'checkout', '-q', main);
+  // a later legitimate change of one file: commit `both` is still ancestor and still holds everything
+  write(root, 'package.json', wt('package.json') + ' \n'); write(root, 'src/index.js', 'export const later = 1;\n'); git(root, 'commit', '-q', '-am', 'later');
+  const done = await feat(); assert.equal(done.code, 0, done.out); assert.match(done.terminal.calls[0].text, /dependencies: t-scaffold \(run r-/);
+  const changes = r.audit.changes;
+  assert.equal(historicalCommitIntegrates(root, git(root, 'rev-parse', 'HEAD').trim(), changes), true);
+  // partial matches split across commits: only commits before `both` exist for the second file's state => rewrite history shape
+  const split = makeProject({ files: BASE_FILES });
+  write(split, 'package.json', wt('package.json')); git(split, 'add', 'package.json'); git(split, 'commit', '-q', '-m', 'pkg');
+  write(split, 'package.json', 'changed\n'); git(split, 'commit', '-q', '-am', 'pkg changed');
+  write(split, 'src/index.js', wt('src/index.js')); git(split, 'add', 'src/index.js'); git(split, 'commit', '-q', '-m', 'idx');
+  assert.equal(historicalCommitIntegrates(split, git(split, 'rev-parse', 'HEAD').trim(), changes), false, 'split across commits');
+  // non-ancestor commit holding everything is not accepted
+  const alt = makeProject({ files: BASE_FILES }); git(alt, 'checkout', '-q', '-b', 'side');
+  write(alt, 'package.json', wt('package.json')); write(alt, 'src/index.js', wt('src/index.js')); git(alt, 'add', 'package.json', 'src/index.js'); git(alt, 'commit', '-q', '-m', 'all');
+  git(alt, 'checkout', '-q', '-'); assert.equal(historicalCommitIntegrates(alt, git(alt, 'rev-parse', 'HEAD').trim(), changes), false, 'not an ancestor');
+  // one file never matches in any candidate
+  const diff = makeProject({ files: BASE_FILES }); write(diff, 'package.json', wt('package.json')); git(diff, 'add', 'package.json'); git(diff, 'commit', '-q', '-m', 'pkg only');
+  assert.equal(historicalCommitIntegrates(diff, git(diff, 'rev-parse', 'HEAD').trim(), changes), false, 'one file missing everywhere');
+  assert.ok(both.length >= 40);
+});
+
+test('historical dependency integration: a reviewed deletion needs a commit that performs it relative to its parent, not mere absence', () => {
+  const root = makeProject({ files: BASE_FILES });
+  const oid = git(root, 'rev-parse', 'HEAD:README.md').trim();
+  const del = [{ path: 'README.md', status: 'deleted', sha256: null, base_oid: oid }];
+  const head = () => git(root, 'rev-parse', 'HEAD').trim();
+  assert.equal(historicalCommitIntegrates(root, head(), del), false, 'file still present');
+  git(root, 'rm', '-q', 'README.md'); git(root, 'commit', '-q', '-m', 'delete');
+  write(root, 'x.txt', 'x\n'); git(root, 'add', 'x.txt'); git(root, 'commit', '-q', '-m', 'later');
+  assert.equal(historicalCommitIntegrates(root, head(), del), true, 'the deleting commit is an ancestor');
+  assert.equal(historicalCommitIntegrates(root, head(), [{ ...del[0], base_oid: 'f'.repeat(40) }]), false, 'a different base blob is not the reviewed deletion');
+  assert.equal(historicalCommitIntegrates(root, head(), [{ path: 'never-existed.txt', status: 'deleted', sha256: null, base_oid: oid }]), false, 'absence alone never qualifies');
+  assert.equal(historicalCommitIntegrates(root, head(), []), false);
+});
+
+test('historical dependency integration: full ancestry, a qualifying commit older than 2000 later commits is accepted', () => {
+  const root = makeProject({ files: BASE_FILES });
+  const oid = git(root, 'rev-parse', 'HEAD:README.md').trim();
+  const del = [{ path: 'README.md', status: 'deleted', sha256: null, base_oid: oid }];
+  git(root, 'rm', '-q', 'README.md'); git(root, 'commit', '-q', '-m', 'delete');
+  const br = git(root, 'rev-parse', '--abbrev-ref', 'HEAD').trim(); let stream = '';
+  for (let i = 0; i < 2100; i++) stream += `commit refs/heads/${br}\ncommitter t <t@example.invalid> ${1700000000 + i} +0000\ndata 2\ne\n${i === 0 ? 'from ' + git(root, 'rev-parse', 'HEAD').trim() + '\n' : ''}\n`;
+  execFileSync('git', ['fast-import', '--quiet'], { cwd: root, input: stream }); git(root, 'reset', '-q', '--hard', br);
+  assert.equal(git(root, 'rev-list', '--count', 'HEAD').trim(), '2102');
+  assert.equal(historicalCommitIntegrates(root, git(root, 'rev-parse', 'HEAD').trim(), del), true);
 });
 
 // ---- 5. Unborn Git: explicit, reviewed baseline ---------------------------------------------------------------------------------

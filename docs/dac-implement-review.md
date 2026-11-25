@@ -46,7 +46,9 @@ output shows a short, redacted excerpt of Codex's stderr plus the transcript pat
    `docs`/`config` (migrations, production changes and deployments need gates dac does not own), has requirements, criteria
    and plain paths (no globs, nothing protected or prohibited). Anything else stops with a precise reason.
 3. **Dependencies.** A `depends_on` task counts only when a run of it passed audit **and** an independent review (PASS), **and**
-   its exact reviewed content is in the project's current `HEAD` (you integrated it, by any means; checked by content hash).
+   its exact reviewed content is in the project's current `HEAD`, or all of it in ONE single commit anywhere in the full ancestry of `HEAD`, with no depth cap (never
+   split across commits; a reviewed deletion needs a commit that removes the file relative to its first parent). You integrate
+   it by any means; it is checked by content hash.
 4. **Git.**
    - *Born repository:* the base is `HEAD`. A dirty tree is refused unless you pass `--preserve-dirty`; then every change stays
      byte-identical and is **not** part of the worktree (it starts from `HEAD`). dac never stashes, resets, cleans or hides.
