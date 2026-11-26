@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<title>DAC Brief Studio v2 — PRD y Prompt DAC</title>
+<style>
+:root{--bg:#0b1020;--bg2:#10182b;--card:#151e32;--line:#29354a;--ink:#eef2fa;--muted:#a1b0c7;--accent:#79e3c7;--accent2:#5bc7ae;--blue:#99bcff;--focus:#e6c777;--rad:16px;font:15px/1.5 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 16% -8%,#18394b 0%,transparent 36%),radial-gradient(ellipse at 100% 20%,#191e46 0%,transparent 33%),var(--bg);color:var(--ink);min-height:100vh}button,input,textarea,select{font:inherit}button{cursor:pointer}a{color:var(--accent)}.container{max-width:1450px;margin:0 auto;padding:29px clamp(16px,3vw,45px) 62px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:37px}.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;letter-spacing:-.5px}.mark{height:37px;width:37px;background:var(--accent);border-radius:12px;color:#102024;display:grid;place-items:center;font-size:15px;font-weight:950}.top-note{color:var(--muted);font-size:13px}.intro{max-width:790px;margin-bottom:30px}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;font-weight:800}h1{font-size:clamp(31px,4vw,48px);line-height:1.12;letter-spacing:-1.8px;margin:10px 0 13px}h1 span{color:var(--accent)}.intro p{color:var(--muted);font-size:16px;margin:0}.pillbar{display:flex;flex-wrap:wrap;gap:9px;margin:18px 0 0}.pill{border:1px solid #33566b;color:#cce6e5;background:#122737;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:650}.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(350px,.87fr);align-items:start;gap:22px}.panel{border:1px solid var(--line);border-radius:var(--rad);background:rgba(21,30,50,.94);box-shadow:0 17px 40px #0002}.panelhead{padding:21px 24px 17px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}.num{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:#233e45;color:var(--accent);font-size:13px;font-weight:800}.panelhead h2{margin:0;font-size:17px;letter-spacing:-.2px}.panelhead small{color:var(--muted);display:block;font-size:12px}.body{padding:22px 24px 26px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}.full{grid-column:1/-1}.field{display:flex;flex-direction:column;gap:7px}.field label{font-weight:650;color:#e7edf8;font-size:13px}.hint{font-size:12px;color:var(--muted);margin-top:-2px}.field input,.field textarea,.field select{width:100%;color:var(--ink);background:#10192b;border:1px solid #354358;border-radius:10px;padding:11px 12px;outline:none;transition:border .12s,box-shadow .12s}.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--accent);box-shadow:0 0 0 3px #79e3c722}.field textarea{min-height:87px;resize:vertical}.field input::placeholder,.field textarea::placeholder{color:#8292a9}.section{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}.section h3{margin:0 0 12px;font-size:14px}.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid #3b4b62;color:#c8d4e7;background:#1b2a41;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:600;transition:all .12s;user-select:none}.chip input{position:absolute;opacity:0;pointer-events:none}.chip:has(input:checked){background:#1f4a48;color:#bfffe9;border-color:#6dddc0}.chip:has(input:focus-visible){outline:3px solid var(--focus);outline-offset:3px}.end-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.btn{border-radius:10px;border:1px solid #45546a;color:var(--ink);background:#202c40;padding:10px 15px;font-weight:750;font-size:13px;display:inline-flex;align-items:center;justify-content:center;gap:7px}.btn:hover{filter:brightness(1.13)}.btn:focus-visible,.tab:focus-visible{outline:3px solid var(--focus);outline-offset:3px}.btn.primary{background:var(--accent);border-color:var(--accent);color:#0d2728}.btn.subtle{border-color:transparent;background:transparent;color:var(--muted)}.preview{position:sticky;top:18px;overflow:hidden}.tabs{display:flex;gap:5px;padding:16px 18px 0}.tab{color:var(--muted);background:transparent;border:0;border-bottom:2px solid transparent;padding:10px 13px;font-size:13px;font-weight:750}.tab[aria-selected=true]{color:var(--accent);border-color:var(--accent)}.preview-header{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;gap:10px;color:#a9bbd2;font-size:12px;background:#111a2c;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.dot{display:inline-block;width:7px;height:7px;background:var(--accent);border-radius:50%;margin-right:7px}.prewrap{padding:0 4px 0 0}.codeout{font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace;font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:18px 22px;max-height:610px;min-height:355px;overflow:auto;color:#dce8f5;background:#10182a}.preview-actions{display:flex;gap:9px;flex-wrap:wrap;padding:16px 20px 20px}.mini{font-size:12px;color:var(--muted);padding:0 20px 21px}.footer{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:12px}#status{min-height:19px;font-size:12px;color:var(--accent);padding:0 20px 14px}.info{padding:12px 14px;border:1px solid #2b4f56;background:#102c36;border-radius:10px;color:#c7e7e6;font-size:12px;margin-top:16px}.tag{font-family:ui-monospace,monospace;color:var(--accent)}@media(max-width:980px){.layout{grid-template-columns:1fr}.preview{position:static}.codeout{max-height:520px}.intro{max-width:none}}@media(max-width:540px){.top-note{display:none}.container{padding-top:17px}.body,.panelhead{padding-left:17px;padding-right:17px}.fields{grid-template-columns:1fr}.preview-actions .btn{flex:1}.codeout{min-height:280px}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.section-caption{font-size:12px;color:var(--muted);margin:0 0 14px}
+.production-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.production-item{border:1px solid #34485d;border-radius:12px;padding:13px;background:#111c2e}
+.production-item .field{gap:7px}
+.production-item textarea{min-height:76px;font-size:12px}
+.production-item select{padding:8px 10px;font-size:12px}
+#scopeHelp{display:block;line-height:1.5}
+@media(max-width:670px){.production-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="container">
+<header class="topbar"><div class="brand"><div class="mark">DAC</div><div>DAC <span style="font-weight:400;color:var(--muted)">/ Brief Studio</span></div></div><div class="top-note">Un estándar para prototipos, MVP y productos reales</div></header>
+<section class="intro"><div class="eyebrow">01 · Idea → documentación → planificación</div><h1>Tu idea, convertida en un <span>brief claro</span>.</h1><p>Define el alcance de tu entrega y sus requisitos operativos. Genera un PRD y el prompt listo para planificar con Codex o Claude Code, usando el flujo SDD de DAC.</p><div class="pillbar"><span class="pill">Sin instalación</span><span class="pill">Sin enviar datos a servidores</span><span class="pill">PRD + prompt DAC</span><span class="pill">Prototipo · MVP productivo · Producto completo</span></div></section>
+<div class="layout">
+<form id="briefForm" class="panel" autocomplete="on">
+  <div class="panelhead"><div class="num">1</div><div><h2>Definir el producto</h2><small>Los campos sin respuesta quedarán marcados como pendientes, nunca inventados.</small></div></div>
+  <div class="body">
+    <div class="fields">
+      <div class="field full"><label for="project">Nombre del proyecto</label><input id="project" placeholder="Ej.: Calculadora MD3" maxlength="140" /></div>
+      <div class="field"><label for="kind">Tipo de trabajo</label><select id="kind"><option value="Proyecto nuevo">Proyecto nuevo</option><option value="Funcionalidad en proyecto existente">Nueva funcionalidad</option><option value="Mejora de proyecto existente">Mejora / refactor</option></select></div>
+      <div class="field"><label for="provider">Asistente de planificación</label><select id="provider"><option value="Codex CLI">Codex CLI</option><option value="Claude Code">Claude Code</option></select></div>
+      <div class="field full"><label for="scope">Alcance de esta entrega</label>
+  <select id="scope">
+    <option value="Por definir">Por definir — elegir alcance</option>
+    <option value="Prototipo">Prototipo / prueba de concepto</option>
+    <option value="MVP productivo">MVP listo para producción</option>
+    <option value="Producto completo">Producto completo / versión de producción</option>
+    <option value="Nueva funcionalidad">Nueva funcionalidad en aplicación existente</option>
+  </select>
+  <span class="hint" id="scopeHelp">Elige si quieres probar una idea, publicar una primera versión real o entregar un producto completo.</span>
+</div>
+      <div class="field full"><label for="problem">Problema identificado</label><textarea id="problem" placeholder="¿Qué problema resuelve? ¿Qué ocurre hoy sin esta solución?"></textarea></div>
+      <div class="field full"><label for="solution">Solución y objetivo</label><textarea id="solution" placeholder="Describe qué construirás y qué resultado visible debe conseguir el usuario."></textarea></div>
+      <div class="field full"><label for="users">Usuarios y roles</label><textarea id="users" placeholder="Ej.: Usuario final: utiliza la calculadora sin crear cuenta."></textarea></div>
+    </div>
+    <section class="section"><h3>Funcionalidades del alcance elegido</h3><div class="chips" id="features">
+      <label class="chip"><input type="checkbox" value="Crear, editar y eliminar" />CRUD</label>
+      <label class="chip"><input type="checkbox" value="Autenticación e inicio de sesión" />Login</label>
+      <label class="chip"><input type="checkbox" value="Búsqueda y filtros" />Filtros</label>
+      <label class="chip"><input type="checkbox" value="Persistencia de datos" />Persistencia</label>
+      <label class="chip"><input type="checkbox" value="Interfaz responsive" />Responsive</label>
+      <label class="chip"><input type="checkbox" value="Accesibilidad y teclado" />Accesibilidad</label>
+      <label class="chip"><input type="checkbox" value="Panel de indicadores" />Dashboard</label>
+      <label class="chip"><input type="checkbox" value="Calendario" />Calendario</label>
+      <label class="chip"><input type="checkbox" value="Notificaciones" />Notificaciones</label>
+      <label class="chip"><input type="checkbox" value="Integración con API" />API</label>
+      <label class="chip"><input type="checkbox" value="Pagos" />Pagos</label>
+      <label class="chip"><input type="checkbox" value="Soporte multiusuario" />Multiusuario</label>
+    </div>
+    <div class="field" style="margin-top:14px"><label for="featuresExtra">Otras funcionalidades (una por línea)</label><textarea id="featuresExtra" placeholder="Suma, resta, multiplicación y división\nDecimales, Clear y Backspace\nManejo de división por cero"></textarea></div></section>
+    <section class="section"><h3>Entrega y evolución</h3><div class="fields">
+  <div class="field full"><label for="releasePlan">Etapas, hitos o versiones (opcional)</label><textarea id="releasePlan" placeholder="Ej.: Entrega 1: operaciones básicas; Entrega 2: historial. Para producto completo, describe los módulos o releases acordados."></textarea><span class="hint">Permite dividir un proyecto real en releases sin reducirlo automáticamente a un MVP.</span></div>
+</div></section>
+<section class="section"><h3>Tecnología y diseño</h3><div class="fields">
+      <div class="field"><label for="platform">Plataforma / stack principal</label><select id="platform"><option value="Por definir con el planificador">Por definir</option><option value="Web — React, TypeScript y Vite">Web · React / TS / Vite</option><option value="Android — Kotlin y Jetpack Compose">Android · Kotlin / Compose</option><option value="Multiplataforma — Kotlin Multiplatform">KMP · Android / iOS</option><option value="Web — Next.js y TypeScript">Web · Next.js</option><option value="Backend — Node.js y TypeScript">Backend · Node / TS</option><option value="Otra (detallar en restricciones)">Otra</option></select></div>
+      <div class="field"><label for="design">Estilo visual</label><input id="design" placeholder="Ej.: Material Design 3, minimalista" /></div>
+      <div class="field full"><label for="references">Referencias visuales o funcionales</label><input id="references" placeholder="URL, producto de referencia o descripción" /></div>
+    </div></section>
+    <section class="section" id="productionSection">
+  <h3>Requisitos de producción y operación</h3>
+  <p class="section-caption" id="productionHelp">Marca qué aspectos aplican a esta entrega. No se consideran implementados ni aprobados por marcar «Incluir».</p>
+  <div class="production-grid">
+    <div class="production-item"><div class="field"><label for="prodSecurity">Seguridad y privacidad</label><select id="prodSecurity"><option value="Por definir">Por definir</option><option value="Incluir">Incluir</option><option value="No aplica">No aplica (justificar)</option></select><textarea id="prodSecurityNotes" rows="2" placeholder="Ej.: autenticación, permisos, protección de datos, amenazas relevantes."></textarea></div></div>
+    <div class="production-item"><div class="field"><label for="prodData">Datos y persistencia</label><select id="prodData"><option value="Por definir">Por definir</option><option value="Incluir">Incluir</option><option value="No aplica">No aplica (justificar)</option></select><textarea id="prodDataNotes" rows="2" placeholder="Ej.: almacenamiento, migraciones, backups, recuperación, retención."></textarea></div></div>
+    <div class="production-item"><div class="field"><label for="prodQuality">Pruebas y calidad</label><select id="prodQuality"><option value="Por definir">Por definir</option><option value="Incluir">Incluir</option><option value="No aplica">No aplica (justificar)</option></select><textarea id="prodQualityNotes" rows="2" placeholder="Ej.: unitarias, integración, E2E, accesibilidad, navegadores, dispositivos."></textarea></div></div>
+    <div class="production-item"><div class="field"><label for="prodRelease">Despliegue y publicación</label><select id="prodRelease"><option value="Por definir">Por definir</option><option value="Incluir">Incluir</option><option value="No aplica">No aplica (justificar)</option></select><textarea id="prodReleaseNotes" rows="2" placeholder="Ej.: ambientes, CI/CD, dominio, App Store, rollback."></textarea></div></div>
+    <div class="production-item"><div class="field"><label for="prodObservability">Monitoreo y diagnóstico</label><select id="prodObservability"><option value="Por definir">Por definir</option><option value="Incluir">Incluir</option><option value="No aplica">No aplica (justificar)</option></select><textarea id="prodObservabilityNotes" rows="2" placeholder="Ej.: errores, métricas, logs sin datos sensibles, alertas."></textarea></div></div>
+    <div class="production-item"><div class="field"><label for="prodMaintenance">Mantenimiento y operación</label><select id="prodMaintenance"><option value="Por definir">Por definir</option><option value="Incluir">Incluir</option><option value="No aplica">No aplica (justificar)</option></select><textarea id="prodMaintenanceNotes" rows="2" placeholder="Ej.: soporte, actualización de dependencias, costes, documentación."></textarea></div></div>
+  </div>
+  <div class="field" style="margin-top:16px"><label for="releaseGates">Condiciones para considerar la entrega lista</label><textarea id="releaseGates" placeholder="Ej.: pruebas pasan, control de acceso verificado, despliegue probado, monitoreo listo, aprobación final del responsable."></textarea><span class="hint">La IA propondrá criterios adicionales para revisión; no afirmará que ya se cumplieron.</span></div>
+</section>
+<section class="section"><h3>Reglas, límites y calidad</h3><div class="fields">
+      <div class="field full"><label for="rules">Reglas de negocio y casos límite</label><textarea id="rules" placeholder="Ej.: División por cero muestra error sin cerrar la aplicación; no redondear antes de tiempo."></textarea></div>
+      <div class="field full"><label for="acceptance">Criterios de aceptación (uno por línea)</label><textarea id="acceptance" placeholder="Ej.: 2 + 3 muestra 5\nEj.: Backspace elimina el último dígito\nEj.: Todos los controles son utilizables con teclado"></textarea><span class="hint">Escribe resultados observables. Si los dejas vacíos, Codex deberá proponerlos para revisión.</span></div>
+      <div class="field full"><label for="nonGoals">Fuera de alcance de esta entrega</label><textarea id="nonGoals" placeholder="Ej.: No incluir login, historial ni sincronización en nube."></textarea></div>
+      <div class="field full"><label for="constraints">Restricciones adicionales</label><textarea id="constraints" placeholder="Ej.: Sin backend. No introducir librerías sin justificación. Conservar arquitectura existente."></textarea></div>
+    </div></section>
+    <div class="info">🔒 Este formulario es un generador de <b>briefs</b>. No concede permisos, no crea un contrato SDD aprobado y no ejecuta código. DAC seguirá exigiendo revisión y autorización humana.</div>
+    <div class="end-actions"><button class="btn primary" type="button" id="generate">↗ Generar documentos</button><button class="btn" type="button" id="example">Cargar ejemplo: calculadora</button><button class="btn subtle" type="button" id="clear">Limpiar formulario</button></div>
+  </div>
+</form>
+<section class="panel preview" aria-label="Vista previa de documentos generados">
+  <div class="panelhead"><div class="num">2</div><div><h2>Documento generado</h2><small>Siempre la misma estructura, adaptada al proyecto.</small></div></div>
+  <div class="tabs" role="tablist" aria-label="Tipo de documento"><button class="tab" role="tab" id="tab-prd" aria-controls="output" aria-selected="true" data-tab="prd">PRD · Markdown</button><button class="tab" role="tab" id="tab-prompt" aria-controls="output" aria-selected="false" data-tab="prompt">Prompt · DAC / SDD</button></div>
+  <div class="preview-header"><span><span class="dot"></span><span id="preview-name">Borrador de producto</span></span><span id="wordcount">0 palabras</span></div>
+  <div class="prewrap"><pre class="codeout" id="output" aria-live="polite"></pre></div>
+  <div class="preview-actions"><button class="btn primary" type="button" id="copy">Copiar al portapapeles</button><button class="btn" type="button" id="download">Descargar .md</button></div>
+  <div id="status" aria-live="polite"></div>
+  <div class="mini" id="outputHelp"><b>PRD:</b> documenta lo que vas a construir. <b>Prompt DAC:</b> contiene el PRD y las instrucciones para que el agente planifique. Copia el Prompt DAC en Codex CLI o Claude Code.</div>
+</section>
+</div>
+<footer class="footer"><span>DAC Brief Studio · Prototipo local, archivo único HTML</span><span>Guardado local en este navegador · Exportación Markdown · v2</span></footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const storageKey = 'dac-brief-studio-v2';
+  const legacyStorageKey = 'dac-brief-studio-v1';
+  const baseFields = ['project','kind','provider','scope','problem','solution','users','featuresExtra',
+    'releasePlan','platform','design','references','rules','acceptance','nonGoals','constraints','releaseGates'];
+  const productionAreas = [
+    ['prodSecurity','Seguridad y privacidad'],
+    ['prodData','Datos y persistencia'],
+    ['prodQuality','Pruebas y calidad'],
+    ['prodRelease','Despliegue y publicación'],
+    ['prodObservability','Monitoreo y diagnóstico'],
+    ['prodMaintenance','Mantenimiento y operación']
+  ];
+  const allFields = [...baseFields, ...productionAreas.flatMap(([id]) => [id, `${id}Notes`])];
+  const form = document.getElementById('briefForm');
+  const out = document.getElementById('output');
+  const state = {tab:'prd'};
+  const raw = id => document.getElementById(id)?.value ?? '';
+  const val = id => raw(id).trim();
+  const lines = value => String(value || '').split(/\r?\n/).map(s => s.trim().replace(/^[-*•]\s*/, '')).filter(Boolean);
+  const selected = () => [...document.querySelectorAll('#features input:checked')].map(x => x.value);
+  const fallback = value => value || 'Pendiente de definir';
+  const bullet = arr => arr.length ? arr.map(x => '- ' + x).join('\n') : '- Pendiente de definir con el planificador';
+  const projectName = () => fallback(val('project'));
+  const featureList = () => [...selected(), ...lines(val('featuresExtra'))];
+  const scopeDescriptions = {
+    'Por definir': 'Alcance sin decidir. El planificador debe aclararlo antes de cerrar el plan.',
+    'Prototipo': 'Validar una idea o hipótesis. No presupone calidad suficiente para publicarse a usuarios reales.',
+    'MVP productivo': 'Entregar una primera versión con funciones esenciales, apta para usuarios reales tras cumplir controles aplicables de producción.',
+    'Producto completo': 'Construir el alcance funcional completo acordado, con calidad, seguridad, operación y lanzamiento según correspondan.',
+    'Nueva funcionalidad': 'Ampliar un producto existente, preservando su arquitectura y comprobando regresiones en el sistema actual.'
+  };
+  const productionDefinitions = () => productionAreas.map(([id,label])=>({id,label,status:val(id),notes:val(`${id}Notes`)}));
+  function formData() {
+    const d = {};
+    allFields.forEach(id=>d[id] = raw(id));
+    d.features = selected();
+    return d;
+  }
+  function save() {
+    try { localStorage.setItem(storageKey, JSON.stringify(formData())); } catch {}
+  }
+  function load() {
+    try {
+      const stored = localStorage.getItem(storageKey) || localStorage.getItem(legacyStorageKey);
+      if (!stored) return;
+      const d = JSON.parse(stored);
+      allFields.forEach(id=>{
+        if (typeof d[id] === 'string') document.getElementById(id).value=d[id];
+      });
+      document.querySelectorAll('#features input').forEach(x=>x.checked=Array.isArray(d.features)&&d.features.includes(x.value));
+    } catch {}
+  }
+  function productionText() {
+    return productionDefinitions().map(({label,status,notes}) =>
+      `### ${label}\n- Estado: ${status}\n- Detalles: ${fallback(notes)}${status === 'No aplica' && !notes ? '\n- Pendiente: justificar por qué no aplica.' : ''}`
+    ).join('\n\n');
+  }
+  function unresolved() {
+    const result=[];
+    if (val('scope')==='Por definir') result.push('Definir si esta entrega es un prototipo, MVP productivo, producto completo o funcionalidad existente.');
+    if (!val('problem')) result.push('Precisar el problema y su impacto.');
+    if (!val('users')) result.push('Definir usuarios y roles.');
+    if (!featureList().length) result.push('Enumerar las funcionalidades de esta entrega.');
+    if (!lines(val('acceptance')).length) result.push('Acordar criterios de aceptación observables.');
+    if (val('platform')==='Por definir con el planificador') result.push('Elegir tecnología antes de autorizar paths, scripts y validaciones.');
+    if (!val('nonGoals')) result.push('Aclarar qué queda fuera de esta entrega.');
+    productionDefinitions().forEach(({label,status,notes})=>{
+      if (status==='Por definir') result.push(`Evaluar si aplica: ${label}.`);
+      if (status==='No aplica' && !notes) result.push(`Justificar por qué no aplica: ${label}.`);
+      if (status==='Incluir' && !notes) result.push(`Definir el requisito verificable de: ${label}.`);
+    });
+    if (['MVP productivo','Producto completo'].includes(val('scope')) && !val('releaseGates'))
+      result.push('Definir condiciones verificables para publicar o dar por terminada la entrega.');
+    if (val('kind')!=='Proyecto nuevo' && !val('references'))
+      result.push('Identificar repositorio, producto o contexto de la aplicación existente.');
+    return result;
+  }
+  function generatePRD() {
+    const features=featureList(), criteria=lines(val('acceptance'));
+    const scope=val('scope'), n=projectName();
+    return `# PRD — ${n}\n\n`+
+      `## 1. Identificación y alcance\n- Proyecto: ${n}\n- Tipo de trabajo: ${val('kind')}\n- Alcance de la entrega: ${scope}\n- Interpretación: ${scopeDescriptions[scope] || 'Por definir'}\n- Destino de planificación: ${val('provider')} + DAC / Full SDD\n\n`+
+      `## 2. Problema\n${fallback(val('problem'))}\n\n`+
+      `## 3. Objetivo y solución\n${fallback(val('solution'))}\n\n`+
+      `## 4. Usuarios y roles\n${fallback(val('users'))}\n\n`+
+      `## 5. Funcionalidades de esta entrega\n${bullet(features)}\n\n`+
+      `## 6. Etapas, hitos y versiones\n${bullet(lines(val('releasePlan')))}\n\n`+
+      `## 7. Requisitos de producción y operación\n${productionText()}\n\n`+
+      `## 8. Reglas de negocio y casos límite\n${bullet(lines(val('rules')))}\n\n`+
+      `## 9. Tecnología\n- Plataforma / stack: ${val('platform')}\n- Dependencias, arquitectura, toolchain y comandos: confirmar con el repositorio y SDD; no se consideran autorizados por este PRD.\n\n`+
+      `## 10. Diseño y experiencia\n- Dirección visual: ${fallback(val('design'))}\n- Referencias: ${fallback(val('references'))}\n\n`+
+      `## 11. Criterios de aceptación aportados\n${criteria.length ? criteria.map((c,i)=>'- AC-USER-'+String(i+1).padStart(2,'0')+': '+c).join('\n') : '- Pendientes: el planificador debe proponer criterios verificables para aprobación humana.'}\n\n`+
+      `## 12. Condiciones de entrega / salida a producción\n${bullet(lines(val('releaseGates')))}\n\n`+
+      `## 13. Fuera de alcance de esta entrega\n${bullet(lines(val('nonGoals')))}\n\n`+
+      `## 14. Restricciones adicionales\n${bullet(lines(val('constraints')))}\n\n`+
+      `## 15. Preguntas abiertas y decisiones pendientes\n${bullet(unresolved())}\n\n`+
+      `---\nEstado: borrador de producto; no equivale a artefactos SDD aprobados ni acredita preparación para producción.`;
+  }
+  function generatePrompt() {
+    const scope=val('scope'), n=projectName();
+    return `# Prompt DAC — planificación Full SDD\n\n`+
+      `## Rol y objetivo\nActúa como technical-planner de DAC en modo read-only para el proyecto «${n}».\n`+
+      `Tipo de trabajo: ${val('kind')}. Alcance de entrega: ${scope}. Proveedor previsto: ${val('provider')}.\n\n`+
+      `## Proceso obligatorio\n`+
+      `1. Inspecciona el repositorio, AGENTS.md, estándar DAC, Constitution, Specify, Project, schemas, workflow y decisiones existentes. Si es una funcionalidad o mejora, conserva arquitectura, datos y flujos actuales. Si falta inicialización, indica los pasos humanos necesarios.\n`+
+      `2. Usa el PRD adjunto como entrada de producto, no como autorización para modificar herramientas ni como contrato técnico ya aprobado. Mantén fielmente las decisiones explícitas y diferencia datos aportados de supuestos.\n`+
+      `3. Confirma el alcance de la entrega: prototipo, MVP productivo, producto completo o cambio incremental. No reduzcas un producto completo a MVP sin consentimiento. Un MVP productivo debe cumplir los requisitos aplicables para usuarios reales.\n`+
+      `4. Revisa los seis dominios de seguridad, datos, calidad, despliegue, monitoreo y mantenimiento. «Por definir» exige análisis; «Incluir» requiere criterios verificables; «No aplica» requiere justificación. Nunca declares controles cumplidos sin evidencia.\n`+
+      `5. Identifica preguntas abiertas, riesgos, dependencias y requisitos de disponibilidad, privacidad, accesibilidad y conformidad pertinentes. No inventes respuestas. Solicita decisiones humanas cuando hagan falta.\n`+
+      `6. Prepara o actualiza Constitution, Specify y Project/Tasks con los contratos canónicos instalados. Respeta Full SDD y los responsables de las fases; no declares fases realizadas por agentes que no intervinieron.\n`+
+      `7. Descompón el alcance acordado en tareas verticales con IDs, orden, dependencias, owners, paths exactos, criterios trazables, pruebas previstas, límites, validación, rollback y responsabilidades humanas. Si hay varias entregas, ordénalas por hitos sin eliminar el alcance completo.\n`+
+      `8. Distingue archivos iniciales que deben prepararse fuera del implementador de los archivos que este podrá modificar. Para npm, verifica lockfile, versión de Node/npm, dependencias, scripts, red, caché y validación offline antes de proponer implement.\n`+
+      `9. Comprueba requisito → criterio → tarea → evidencia y valida los artefactos con los schemas disponibles. Lista cualquier condición no verificada como PENDIENTE o BLOCKED, sin inventar PASS.\n`+
+      `10. Muestra primero el plan y las decisiones abiertas. NO llames sdd_handoff_submit hasta que el humano autorice presentar el borrador. Tras autorizarse, usa exclusivamente el MCP oficial y devuelve status, handoff_id, plan_digest, expires_at y archivos previstos.\n\n`+
+      `## Restricciones operativas\n`+
+      `- Esta sesión es de planificación: no implementar ni escribir archivos.\n`+
+      `- No ejecutar shell si el adaptador SDD la prohíbe; no cambiar permisos, agentes, contratos o gates para saltarse bloqueos.\n`+
+      `- No considerar la persistencia SDD como autorización de implementación; ambos gates requieren confirmación humana independiente.\n`+
+      `- No declarar el producto listo para producción por tener CI verde o un review PASS si faltan criterios aplicables de entrega.\n`+
+      `- Este texto no concede autorización para usar redes, instalar dependencias, desplegar o modificar Git.\n\n`+
+      `## PRD — entrada de producto\n\n${generatePRD()}\n\n`+
+      `## Entrega esperada\nA. Resumen del producto y alcance elegido.\nB. Requisitos funcionales, no funcionales y condiciones de salida.\nC. Decisiones de arquitectura y preguntas abiertas.\nD. Plan por tareas y/o hitos completos, con trazabilidad.\nE. Preparación humana, validaciones y riesgos.\nF. Estado real y pasos siguientes, sin implementar todavía.`;
+  }
+  const currentText = ()=>state.tab==='prd' ? generatePRD() : generatePrompt();
+  function updateScopeHelp() {
+    document.getElementById('scopeHelp').textContent=scopeDescriptions[val('scope')] || scopeDescriptions['Por definir'];
+    document.getElementById('productionHelp').textContent=val('scope')==='Prototipo'
+      ? 'Indica lo que se evaluará en el prototipo y lo que se dejará explícitamente fuera. Un prototipo no se considera publicable por defecto.'
+      : 'Decide qué controles aplican a esta entrega. «Incluir» crea un requisito por planificar, no una garantía ya cumplida.';
+  }
+  function render() {
+    updateScopeHelp();
+    const t=currentText();
+    out.textContent=t;
+    document.getElementById('preview-name').textContent=`${state.tab==='prd'?'PRD':'Prompt DAC'} · ${projectName()}`;
+    document.getElementById('wordcount').textContent=t.split(/\s+/).filter(Boolean).length+' palabras';
+    document.getElementById('outputHelp').innerHTML=state.tab==='prd'
+      ? '<b>PRD:</b> especifica el producto y su alcance. Descárgalo para documentarlo; no es una aprobación SDD.'
+      : '<b>Prompt DAC:</b> incluye automáticamente el PRD completo. Copia solo este texto en Codex CLI o Claude Code para comenzar la planificación.';
+  }
+  function msg(text) {document.getElementById('status').textContent=text;}
+  form.addEventListener('input',()=>{save();render();msg('');});
+  form.addEventListener('change',()=>{save();render();msg('');});
+  document.querySelectorAll('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>{
+    state.tab=btn.dataset.tab;
+    document.querySelectorAll('[data-tab]').forEach(other=>other.setAttribute('aria-selected',String(other===btn)));
+    render();msg('');
+  }));
+  document.getElementById('generate').addEventListener('click',()=>{save();render();msg('Documento actualizado. Puedes copiarlo o descargarlo.');});
+  document.getElementById('copy').addEventListener('click',async()=>{
+    const t=currentText();
+    try {await navigator.clipboard.writeText(t);msg('Copiado al portapapeles.');}
+    catch {const el=document.createElement('textarea');el.value=t;document.body.append(el);el.select();
+      try {document.execCommand('copy');msg('Copiado al portapapeles.');}catch{msg('Copia no disponible: selecciona el texto de la vista previa.');}
+      el.remove();}
+  });
+  document.getElementById('download').addEventListener('click',()=>{
+    const t=currentText();
+    const slug=(val('project')||'proyecto').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60)||'proyecto';
+    const url=URL.createObjectURL(new Blob([t],{type:'text/markdown;charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download=`${state.tab==='prd'?'PRD':'PROMPT-DAC'}-${slug}.md`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    msg('Archivo Markdown preparado.');
+  });
+  document.getElementById('clear').addEventListener('click',()=>{
+    if(!confirm('¿Limpiar todos los campos?')) return;
+    form.reset();
+    try{localStorage.removeItem(storageKey);localStorage.removeItem(legacyStorageKey);}catch{}
+    render();msg('Formulario limpio.');
+  });
+  document.getElementById('example').addEventListener('click',()=>{
+    const sample={
+      project:'Calculadora Material Design 3',kind:'Proyecto nuevo',provider:'Codex CLI',scope:'Producto completo',
+      problem:'Necesito calcular operaciones cotidianas sin errores de entrada y con una experiencia accesible en escritorio y móvil.',
+      solution:'Una calculadora responsive con operaciones básicas, teclado físico y manejo visible de errores, lista para publicar como aplicación web.',
+      users:'Personas que necesitan una calculadora sencilla; sin cuentas ni perfiles.',
+      featuresExtra:'Suma, resta, multiplicación y división\nDecimales, Clear y Backspace\nSoporte de teclado físico',
+      releasePlan:'Entrega funcional: operaciones y teclado\nCierre: accesibilidad, compatibilidad y publicación',
+      platform:'Web — React, TypeScript y Vite', design:'Material Design 3, limpio, adaptable',
+      references:'https://m3.material.io/',
+      rules:'División por cero muestra un error recuperable\nNo permitir dos separadores decimales\nClear reinicia el cálculo actual',
+      acceptance:'2 + 3 muestra 5\n10 / 0 muestra un error recuperable\nBackspace elimina el último dígito\nLa calculadora funciona con teclado físico',
+      nonGoals:'Sin autenticación\nSin historial ni sincronización en nube',
+      constraints:'Sin backend; no añadir dependencias sin justificación',
+      prodSecurity:'Incluir',prodSecurityNotes:'Validar entradas; no transmitir datos de la operación a servicios externos.',
+      prodData:'No aplica',prodDataNotes:'No se guardan cálculos ni datos personales.',
+      prodQuality:'Incluir',prodQualityNotes:'Pruebas de operaciones y errores, navegación de teclado, foco visible y responsive.',
+      prodRelease:'Incluir',prodReleaseNotes:'Build reproducible y publicación web estática; criterio de rollback.',
+      prodObservability:'Por definir',prodObservabilityNotes:'Evaluar si hacen falta métricas sin identificar usuarios.',
+      prodMaintenance:'Incluir',prodMaintenanceNotes:'Documentar cómo reconstruir y actualizar dependencias.',
+      releaseGates:'Todas las pruebas funcionales pasan\nVerificación real de accesibilidad y de interfaces pequeñas\nBuild validado en entorno de publicación'
+    };
+    allFields.forEach(id=>{if(typeof sample[id]==='string')document.getElementById(id).value=sample[id];});
+    document.querySelectorAll('#features input').forEach(x=>x.checked=['Interfaz responsive','Accesibilidad y teclado'].includes(x.value));
+    save();render();msg('Ejemplo de producto real cargado. Personalízalo según tu proyecto.');
+  });
+  load();render();
+})();
+</script>
+</body>
+</html>
