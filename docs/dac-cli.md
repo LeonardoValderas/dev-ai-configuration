@@ -71,6 +71,11 @@ Use `dac update` (below) for projects; updating the command itself is `git pull`
 
 ## Commands
 
+- `brief` opens DAC Brief Studio ([docs/brief-studio.md](brief-studio.md)), the static local form at
+  `tools/brief-studio/index.html`, resolved from this checkout (never from the current directory). It works
+  outside a DAC project and takes no options. On macOS it runs `/usr/bin/open <absolute path>` (argument vector,
+  no shell); on other platforms it prints the absolute path and exits 0. If the launch fails it exits 1 and
+  prints the path. No server and no network; the form keeps a draft in browser `localStorage`.
 - `init` with `--provider` is non-interactive (as before): it shows the bootstrap dry-run plan, then
   applies. Without `--provider`, a terminal is required (stdin and stdout TTY); otherwise it exits 2
   with zero writes. Interactive `init` asks for the existing project path (blank: auto-detect),

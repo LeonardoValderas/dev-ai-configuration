@@ -4,6 +4,7 @@
 //   update -> installer/bootstrap.mjs update (dry-run preview, then the same engine)
 //   start/status/stop -> adapters/shared/sdd-handoff/custodian-cli.mjs (start is FOREGROUND; no daemon)
 //   sdd    -> adapters/shared/sdd-writer/cli.mjs (child process; terminal approval stays writer-owned; exit codes pass through)
+//   brief  -> opens tools/brief-studio/index.html (static, local-only) in the default browser on macOS; elsewhere prints its path.
 //   implement/review -> adapters/shared/sdd-run (verified persisted task -> trusted-terminal authorization -> isolated worktree ->
 //            injectable runner -> blocking audit; independent read-only review). Runners are injected by tests; nothing here probes a provider.
 // Exit codes: 0 ok, 1 failure, 2 usage; `sdd` passes the writer's code through (including 3).
@@ -21,6 +22,7 @@ import { reviewTask } from '../adapters/shared/sdd-run/review.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WRITER = join(HERE, '..', 'adapters/shared/sdd-writer/cli.mjs');
+const BRIEF_HTML = join(HERE, '..', 'tools/brief-studio/index.html'); // resolved from the CLI checkout, never from cwd
 const INIT_PROVIDERS = ['claude-code', 'codex']; // cursor is intentionally not offered by dac v1
 const HANDOFF_PROVIDERS = INIT_PROVIDERS;
 
@@ -35,6 +37,8 @@ const USAGE = `Usage: dac <command> [options]
   sdd plan   --handoff <ID> [--json]    Print the canonical plan (no writes)   (or --input <file>)
   sdd apply  --handoff <ID> [--json]    Apply after approval on the controlling terminal   (or --input <file>)
   sdd verify --project <ID> [--json]    Re-check artifacts against receipts (no writes)
+  brief                                 Open DAC Brief Studio (local static HTML form that drafts a PRD and a DAC prompt) in the default
+                                        browser on macOS; on other platforms print its absolute path. Works outside a DAC project; no server.
   implement <task-id> [--project <ID>] [--preserve-dirty] [--model <model>]
                                         Implement one persisted SDD task in an automatically created isolated branch/worktree after a
                                         trusted-terminal authorization of the exact task, base, scope and prompt; a blocking audit follows.
@@ -346,6 +350,23 @@ function sdd(args, cwd) {
   return r.status ?? 1;
 }
 
+// Argument-vector launch (no shell). The path is absolute, so it cannot be read as an option.
+const openWithDefaultBrowser = (file) => {
+  const r = spawnSync('/usr/bin/open', [file], { stdio: 'ignore', shell: false });
+  if (r.error || r.status !== 0) throw new AdapterError('BROWSER', `could not open the default browser; open this file manually: ${file}`);
+};
+
+// deps.platform / deps.openBrowser are test seams (never reachable from the production entry).
+function briefCmd(args, deps) {
+  parseFlags(args, {});
+  let st; try { st = statSync(BRIEF_HTML); } catch { st = null; }
+  if (!st?.isFile()) throw new AdapterError('BRIEF_MISSING', `DAC Brief Studio not found at ${BRIEF_HTML}; this checkout is incomplete`);
+  if ((deps.platform ?? process.platform) !== 'darwin') { console.log(BRIEF_HTML); return 0; }
+  (deps.openBrowser ?? openWithDefaultBrowser)(BRIEF_HTML);
+  console.log(`Opened DAC Brief Studio: ${BRIEF_HTML}`);
+  return 0;
+}
+
 const taskArg = (cmd, args) => { const [id, ...rest] = args; if (!id || id.startsWith('-')) fail(`${cmd} needs a task id`); return [id, rest]; };
 
 async function implementCmd(args, cwd, deps) {
@@ -374,6 +395,7 @@ export async function mainWithDeps(argv, cwd, io, deps) {
     if (cmd === 'status') return await status(rest, cwd);
     if (cmd === 'stop') return await stop(rest, cwd);
     if (cmd === 'sdd') return sdd(rest, cwd);
+    if (cmd === 'brief') return briefCmd(rest, deps);
     if (cmd === 'implement') return await implementCmd(rest, cwd, deps);
     if (cmd === 'review') return await reviewCmd(rest, cwd, deps);
     return fail('Unknown command');

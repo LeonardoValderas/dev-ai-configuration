@@ -128,9 +128,15 @@ node <clone>/bin/dac.mjs start                      # foreground custodian (Ctrl
 node <clone>/bin/dac.mjs status [--json]
 node <clone>/bin/dac.mjs sdd plan --handoff <ID>    # then: sdd apply --handoff <ID>; sdd verify --project <ID>
 node <clone>/bin/dac.mjs stop
+node <clone>/bin/dac.mjs brief                      # open DAC Brief Studio (local HTML form -> PRD + DAC prompt); works outside a DAC project
 node <clone>/bin/dac.mjs implement <task-id>        # implement one persisted SDD task in an isolated worktree (trusted-terminal authorization, blocking audit)
 node <clone>/bin/dac.mjs review <task-id>           # independent read-only review of the audited run (separate session, exact audit/diff hash)
 ```
+
+`dac brief` opens [DAC Brief Studio](docs/brief-studio.md), a static local HTML form (`tools/brief-studio/index.html`) that turns an
+idea into a PRD and a DAC prompt for read-only SDD planning. It runs entirely in the browser: no server, no network
+transmission of the form, no dependencies; it keeps a draft in the browser's `localStorage` (do not enter secrets or customer
+data). On macOS it opens the file in the default browser; on other platforms it prints the absolute path. It needs no DAC project.
 
 `dac implement` / `dac review` (Increment B, [docs/dac-implement-review.md](docs/dac-implement-review.md)): the Writer now also
 persists Plan/Tasks as `.sdd/artifacts/<project-id>/project.json` (documentation only; it authorizes nothing). `implement`
