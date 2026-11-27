@@ -4,7 +4,7 @@
 Delegated work uses the canonical contracts (schemas in `.claude/dac/contracts/`).
 
 - Task contract: objective, verified_context, allowed_paths, prohibited_paths, constraints, authorized_tools, acceptance_criteria, required_evidence, validation_commands, rollback.
-- Restrictions: work only inside `allowed_paths` and `authorized_tools`; honor `prohibited_paths` and `constraints`. Without a task contract, stop and ask for one.
+- Restrictions: work only inside `allowed_paths` and `authorized_tools`; honor `prohibited_paths` and `constraints`. Every executable task for every agent requires a task contract: without one, stop and ask for one. The only exception is the `technical-planner` read-only planning input (a user PRD/brief, or existing spec artifacts, is not a task contract): it permits only Read/Grep/Glob inspection, questions and proposed planning documents, and grants no write, shell, implementation, review, persistence or permission widening.
 - Result: execution_status (COMPLETE | PARTIAL | BLOCKED), validation_result (PASS | FAIL | BLOCKED), files_changed, evidence, warnings, unresolved_blockers.
 - Never report a check as passed unless it was actually executed.
 
